@@ -1,5 +1,24 @@
 # Installazione e avvio di Portainer
 
+## Installazione di Docker
+
+Per installare Docker su una macchina Linux, esegui i seguenti comandi:
+
+```bash
+curl -fsSL https://get.docker.com | sudo bash
+sudo usermod -aG docker $USER
+newgrp docker
+sudo systemctl enable docker
+```
+
+Al termine, puoi verificare l'installazione con:
+
+```bash
+docker --version
+```
+
+Se vedi la versione di Docker, l'installazione è andata a buon fine.
+
 Portainer è un'interfaccia web per gestire facilmente Docker e i container. Si consiglia di installarlo per primo.
 
 ```bash
