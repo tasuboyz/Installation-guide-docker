@@ -88,6 +88,103 @@ Configurazione → Notifiche → Configurazione Email
 Per integrare GLPI con Active Directory/LDAP:
 Configurazione → Autenticazione → LDAP
 
+### Deployment Agent GLPI tramite GPO
+Per automatizzare l'installazione dell'agent GLPI sui client tramite Group Policy Objects (GPO) o strumenti di deploy:
+
+#### Script di installazione automatica
+Creare un file batch (es. `install_glpi_agent.bat`) con il seguente contenuto:
+
+```batch
+@echo off
+
+REM Verifica e crea la cartella C:\Temp se non esiste
+IF EXIST "C:\Temp" (
+    echo "C:\Temp folder exists."
+) ELSE (
+    echo "C:\Temp folder does not exist. Creating folder..."
+    mkdir "C:\Temp"
+)
+
+REM Verifica se GLPI Agent è già installato
+IF EXIST "C:\Program Files\GLPI-Agent" (
+    echo "GLPI Agent already installed. No action needed."
+) ELSE (
+    echo "GLPI Agent not found. Installing..."
+    
+    REM Installazione silenziosa dell'agent GLPI
+    \\172.30.0.118\GLPI-Agent\GLPI-Agent-1.15-x64.msi /quiet /norestart /l*V "C:\Temp\GLPI-Agent-Install.log" SERVER="http://172.30.0.48"
+    
+    REM Verifica se l'installazione è riuscita
+    IF %ERRORLEVEL% EQU 0 (
+        echo "GLPI Agent installed successfully."
+    ) ELSE (
+        echo "GLPI Agent installation failed. Check log file: C:\Temp\GLPI-Agent-Install.log"
+    )
+)
+
+echo "Script completed."
+```
+
+#### Configurazione tramite GPO (Group Policy Objects)
+
+1. **Apertura Group Policy Management Console (GPMC)**
+   - Apri `gpmc.msc` sul Domain Controller
+   - Naviga alla OU desiderata
+
+2. **Creazione nuova GPO**
+   - Crea una nuova GPO: "GLPI Agent Deployment"
+   - Modifica la GPO
+
+3. **Configurazione Script di Startup**
+   - Vai a: `Computer Configuration → Policies → Windows Settings → Scripts (Startup/Shutdown)`
+   - Doppio click su "Startup"
+   - Aggiungi il file `install_glpi_agent.bat`
+
+4. **Configurazione Script di Logon (alternativa)**
+   - Vai a: `User Configuration → Policies → Windows Settings → Scripts (Logon/Logoff)`
+   - Doppio click su "Logon"
+   - Aggiungi il file `install_glpi_agent.bat`
+
+#### Deployment tramite SCCM/MECM
+
+```powershell
+# Script PowerShell per SCCM
+$AgentPath = "\\172.30.0.118\GLPI-Agent\GLPI-Agent-1.15-x64.msi"
+$LogPath = "C:\Temp\GLPI-Agent-Install.log"
+$ServerURL = "http://172.30.0.48"
+
+# Verifica se l'agent è già installato
+if (!(Test-Path "C:\Program Files\GLPI-Agent")) {
+    # Installazione silenziosa
+    Start-Process -FilePath "msiexec.exe" -ArgumentList "/i `"$AgentPath`" /quiet /norestart /l*V `"$LogPath`" SERVER=`"$ServerURL`"" -Wait
+    
+    # Verifica installazione
+    if (Test-Path "C:\Program Files\GLPI-Agent") {
+        Write-Host "GLPI Agent installed successfully"
+        exit 0
+    } else {
+        Write-Host "GLPI Agent installation failed"
+        exit 1
+    }
+} else {
+    Write-Host "GLPI Agent already installed"
+    exit 0
+}
+```
+
+#### Parametri di installazione MSI
+
+- `/quiet` - Installazione silenziosa senza interfaccia utente
+- `/norestart` - Impedisce il riavvio automatico del sistema
+- `/l*V "percorso_log"` - Crea un log dettagliato dell'installazione
+- `SERVER="http://IP_GLPI"` - Specifica l'URL del server GLPI
+
+#### Note per il deployment
+- Assicurarsi che il file MSI sia accessibile da tutti i client
+- Testare lo script su un gruppo limitato prima del rollout completo
+- Verificare i permessi di accesso alla condivisione di rete
+- Monitorare i log di installazione per eventuali errori
+
 ## 10. Note di sicurezza
 - **Cambia le password di default** dopo l'installazione
 - Esponi le porte solo su reti sicure
