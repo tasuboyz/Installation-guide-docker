@@ -1,0 +1,201 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n    c.id AS computer_id, \n    c.name AS computer_name, \n    c.serial AS computer_serial,\n    u.id AS user_id, \n    u.name AS user_name, \n    e.email AS user_email,\n    type.name AS 'Tipo',\n    manu.name AS 'Produttore',\n    model.name AS 'Modello',\n    c.states_id AS 'Stato',\n    GROUP_CONCAT(DISTINCT \n        CASE \n            WHEN ci.itemtype = 'Monitor' THEN CONCAT('Monitor: ', mon.name, ' (SN: ', mon.serial, ')')\n            WHEN ci.itemtype = 'Peripheral' THEN CONCAT('Periferica: ', per.name, ' (SN: ', per.serial, ')')\n        END\n        SEPARATOR '; '\n    ) AS dispositivi_collegati,\n    GROUP_CONCAT(DISTINCT \n        CONCAT('Telefono: ', p.name, \n               ' (Produttore: ', COALESCE(phone_manu.name, 'N/A'), \n               ', Modello: ', COALESCE(phone_model.name, 'N/A'),\n               ', SN: ', COALESCE(p.serial, 'N/A'), ')')\n        SEPARATOR '; '\n    ) AS telefoni_associati\nFROM glpi_computers c\nJOIN glpi_users u ON c.users_id = u.id\nJOIN glpi_useremails e ON u.id = e.users_id\nLEFT JOIN glpi_computertypes type ON c.computertypes_id = type.id\nLEFT JOIN glpi_manufacturers manu ON c.manufacturers_id = manu.id\nLEFT JOIN glpi_computermodels model ON c.computermodels_id = model.id\nLEFT JOIN glpi_computers_items ci ON c.id = ci.computers_id\nLEFT JOIN glpi_monitors mon ON (ci.itemtype = 'Monitor' AND ci.items_id = mon.id)\nLEFT JOIN glpi_peripherals per ON (ci.itemtype = 'Peripheral' AND ci.items_id = per.id)\nLEFT JOIN glpi_phones p ON p.users_id = u.id\nLEFT JOIN glpi_manufacturers phone_manu ON p.manufacturers_id = phone_manu.id\nLEFT JOIN glpi_phonemodels phone_model ON p.phonemodels_id = phone_model.id\nWHERE c.states_id = 1 \nAND c.users_id IS NOT NULL\nAND (c.comment IS NULL OR c.comment NOT LIKE CONCAT('%Assegnato a ', u.name, ' (', e.email, ')%'))\nGROUP BY \n    c.id, \n    c.name, \n    c.serial, \n    u.id, \n    u.name, \n    e.email, \n    type.name, \n    manu.name, \n    model.name, \n    c.states_id\nORDER BY c.name;",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        -400,
+        -80
+      ],
+      "id": "ea407395-af2c-4989-9a2e-9b3fcdb852c7",
+      "name": "Select Couple",
+      "credentials": {
+        "mySql": {
+          "id": "A2qtO6gl96gQg6Dz",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE glpi_computers c\nJOIN glpi_users u ON c.users_id = u.id\nJOIN glpi_useremails e ON u.id = e.users_id\nSET c.comment = CONCAT('Assegnato a ', u.name, ' (', e.email, ')')\nWHERE c.states_id = 1 \nAND c.users_id IS NOT NULL\nAND (c.comment NOT LIKE CONCAT('%', u.name, '%', e.email, '%') OR c.comment IS NULL);",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        -400,
+        120
+      ],
+      "id": "29131fbf-b762-462b-8acc-4332a576fee3",
+      "name": "Update Assignement",
+      "credentials": {
+        "mySql": {
+          "id": "A2qtO6gl96gQg6Dz",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -780,
+        0
+      ],
+      "id": "0aed9fd8-be88-4c45-b428-db1482743751",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "fromEmail": "rub_automation@rubvalves.com",
+        "toEmail": "={{ $item(\"0\").$node[\"Select Couple\"].json[\"user_email\"] }}",
+        "subject": "=NUOVA ASSEGNAZIONE DISPOSITIVO: {{ $json.user_name }}",
+        "html": "=<p>Tipo: {{ $json.Tipo }}</p>\n<p>Produttore: {{ $json.Produttore }}</p>\n<p>Modello: {{ $json.Modello }}</p>\n<p>Seriale: {{ $json.computer_serial }}</p>\n<p> Dispositivi collegati: {{ $json.dispositivi_collegati }} </p>\n<p> Telefono associato: {{ $json.telefoni_associati }}</p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        -80,
+        -80
+      ],
+      "id": "2c04af2c-abba-42db-9288-adf111bc1d93",
+      "name": "Send email",
+      "webhookId": "c0b5b705-ef08-4e1c-8725-ae15f7858ffc",
+      "credentials": {
+        "smtp": {
+          "id": "DHefjs3Sd5ood5ts",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT \n    c.id                AS computer_id, \n    c.name              AS computer_name, \n    c.serial            AS computer_serial,\n    c.comment           AS commento_origine,\n    u.id                AS user_id, \n    u.name              AS user_name, \n    e.email             AS user_email,\n    c.states_id         AS stato_attuale\nFROM \n    glpi_computers c\nLEFT JOIN \n    glpi_users u \n      ON c.users_id = u.id\nLEFT JOIN \n    glpi_useremails e \n      ON u.id = e.users_id\nWHERE \n    c.comment LIKE 'Assegnato a % (%'\n    AND (\n        c.states_id <> 1\n        OR c.users_id IS NULL\n        OR c.comment NOT LIKE CONCAT('%Assegnato a ', u.name, ' (', e.email, ')%')\n    )\nORDER BY \n    c.name;\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        -400,
+        320
+      ],
+      "id": "1092f09c-fab0-4bd4-a9d6-78fcae3d9408",
+      "name": "Select Unassigned Device",
+      "credentials": {
+        "mySql": {
+          "id": "A2qtO6gl96gQg6Dz",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE glpi_computers c\nLEFT JOIN glpi_users u\n  ON c.users_id = u.id\nLEFT JOIN glpi_useremails e\n  ON u.id = e.users_id\nSET \n  c.comment = NULL\nWHERE \n  c.comment LIKE 'Assegnato a % (%)'\n  AND (\n    c.states_id <> 1\n    OR c.users_id IS NULL\n  );\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySql",
+      "typeVersion": 2.4,
+      "position": [
+        -80,
+        320
+      ],
+      "id": "a8c3524c-0311-4672-8c8e-caed0bec6865",
+      "name": "Clean Comment",
+      "credentials": {
+        "mySql": {
+          "id": "A2qtO6gl96gQg6Dz",
+          "name": "MySQL account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Automazione Dispositivi Assegnati\n**Double click** to edit me. [Guide](https://docs.n8n.io/workflows/sticky-notes/)",
+        "height": 600,
+        "width": 1180
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -880,
+        -100
+      ],
+      "typeVersion": 1,
+      "id": "2f09205e-88e8-4020-908c-70649c7021df",
+      "name": "Sticky Note"
+    }
+  ],
+  "connections": {
+    "Select Couple": {
+      "main": [
+        [
+          {
+            "node": "Send email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Assignement": {
+      "main": [
+        []
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Select Couple",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Select Unassigned Device",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Update Assignement",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Unassigned Device": {
+      "main": [
+        [
+          {
+            "node": "Clean Comment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3b9840a0b4ca729a3ccb7e99da4bb58cd4ce938c3c69f95986698cbfd2a7d8ba"
+  }
+}

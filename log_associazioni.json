@@ -1,0 +1,37 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH storico_utenti AS (\n    SELECT \n        l.items_id AS computer_id,\n        CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(l.old_value, '(', -1), ')', 1) AS UNSIGNED) AS user_id,\n        SUBSTRING_INDEX(l.old_value, ' (', 1) AS user_name,\n        l.date_mod AS data_modifica,\n        'storico' AS origine\n    FROM glpi_logs l\n    WHERE l.itemtype = 'Computer'\n      AND l.id_search_option = 70\n),\nutenti_attuali AS (\n    SELECT \n        c.id AS computer_id,\n        u.id AS user_id,\n        u.name AS user_name,\n        NULL AS data_modifica,\n        'attuale' AS origine\n    FROM glpi_computers c\n    JOIN glpi_users u ON c.users_id = u.id\n),\nutenti_unificati AS (\n    SELECT * FROM storico_utenti\n    UNION\n    SELECT * FROM utenti_attuali\n),\ndispositivi AS (\n    SELECT \n        c.id AS computer_id,\n        GROUP_CONCAT(DISTINCT \n            CASE \n                WHEN ci.itemtype = 'Monitor' THEN CONCAT('Monitor: ', mon.name, ' (SN: ', mon.serial, ')')\n                WHEN ci.itemtype = 'Peripheral' THEN CONCAT('Periferica: ', per.name, ' (SN: ', per.serial, ')')\n            END\n            SEPARATOR '; '\n        ) AS dispositivi_collegati,\n        GROUP_CONCAT(DISTINCT \n            CONCAT('Telefono: ', p.name, \n                   ' (Produttore: ', COALESCE(phone_manu.name, 'N/A'), \n                   ', Modello: ', COALESCE(phone_model.name, 'N/A'),\n                   ', SN: ', COALESCE(p.serial, 'N/A'), ')')\n            SEPARATOR '; '\n        ) AS telefoni_associati\n    FROM glpi_computers c\n    LEFT JOIN glpi_computers_items ci ON c.id = ci.computers_id\n    LEFT JOIN glpi_monitors mon ON (ci.itemtype = 'Monitor' AND ci.items_id = mon.id)\n    LEFT JOIN glpi_peripherals per ON (ci.itemtype = 'Peripheral' AND ci.items_id = per.id)\n    LEFT JOIN glpi_phones p ON p.entities_id = c.entities_id\n    LEFT JOIN glpi_manufacturers phone_manu ON p.manufacturers_id = phone_manu.id\n    LEFT JOIN glpi_phonemodels phone_model ON p.phonemodels_id = phone_model.id\n    GROUP BY c.id\n),\ndettagli_computer AS (\n    SELECT \n        c.id AS computer_id,\n        c.name AS computer_name,\n        c.serial AS computer_serial,\n        type.name AS tipo,\n        manu.name AS produttore,\n        model.name AS modello,\n        c.states_id AS stato\n    FROM glpi_computers c\n    LEFT JOIN glpi_computertypes type ON c.computertypes_id = type.id\n    LEFT JOIN glpi_manufacturers manu ON c.manufacturers_id = manu.id\n    LEFT JOIN glpi_computermodels model ON c.computermodels_id = model.id\n)\n\nSELECT \n    u.*,\n    dc.computer_name,\n    dc.computer_serial,\n    dc.tipo,\n    dc.produttore,\n    dc.modello,\n    dc.stato,\n    d.dispositivi_collegati,\n    d.telefoni_associati\nFROM utenti_unificati u\nLEFT JOIN dispositivi d ON u.computer_id = d.computer_id\nLEFT JOIN dettagli_computer dc ON u.computer_id = dc.computer_id\nORDER BY u.computer_id, u.data_modifica DESC;\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.mySqlTool",
+      "typeVersion": 2.4,
+      "position": [
+        120,
+        60
+      ],
+      "id": "16fb87a2-54a1-4da9-bce4-f9c2ddd59e23",
+      "name": "Execute a SQL query in MySQL",
+      "credentials": {
+        "mySql": {
+          "id": "A2qtO6gl96gQg6Dz",
+          "name": "MySQL account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Execute a SQL query in MySQL": {
+      "ai_tool": [
+        []
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "3b9840a0b4ca729a3ccb7e99da4bb58cd4ce938c3c69f95986698cbfd2a7d8ba"
+  }
+}
