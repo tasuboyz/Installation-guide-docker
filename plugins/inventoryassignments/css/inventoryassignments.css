@@ -1,0 +1,203 @@
+/**
+ * CSS per il plugin Inventory Assignments
+ */
+
+.inventory-assignments-container {
+    margin: 20px 0;
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.inventory-assignments-container .card {
+    border: none;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    border-radius: 8px;
+}
+
+.inventory-assignments-container .card-header {
+    background: linear-gradient(45deg, #28a745, #20c997);
+    color: white;
+    border-radius: 8px 8px 0 0;
+    padding: 1rem 1.5rem;
+}
+
+.inventory-assignments-container .card-header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.inventory-assignments-container .table {
+    margin-bottom: 0;
+}
+
+.inventory-assignments-container .table th {
+    background-color: #343a40;
+    color: white;
+    border: none;
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+    padding: 12px 15px;
+}
+
+.inventory-assignments-container .table td {
+    padding: 12px 15px;
+    vertical-align: middle;
+    border-top: 1px solid #dee2e6;
+}
+
+.inventory-assignments-container .table tbody tr:hover {
+    background-color: #f8f9fa;
+    transition: background-color 0.15s ease-in-out;
+}
+
+.inventory-assignments-container .btn-group-sm .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+    border-radius: 4px;
+}
+
+.inventory-assignments-container .badge {
+    font-size: 0.75rem;
+    padding: 0.35em 0.65em;
+}
+
+/* Responsive table */
+.inventory-assignments-container .table-responsive {
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+/* Statistics cards */
+.inventory-assignments-container .card.border-warning .card-header {
+    background: linear-gradient(45deg, #ffc107, #fd7e14);
+}
+
+.inventory-assignments-container .card.border-info .card-header {
+    background: linear-gradient(45deg, #17a2b8, #6f42c1);
+}
+
+/* Icons styling */
+.inventory-assignments-container .ti {
+    vertical-align: middle;
+}
+
+/* Alert boxes */
+.inventory-assignments-container .alert {
+    border-radius: 6px;
+    border: none;
+    padding: 1rem 1.25rem;
+}
+
+.inventory-assignments-container .alert-info {
+    background: linear-gradient(45deg, #d1ecf1, #bee5eb);
+    color: #0c5460;
+}
+
+.inventory-assignments-container .alert-warning {
+    background: linear-gradient(45deg, #ffeaa7, #fdcb6e);
+    color: #856404;
+}
+
+/* Links styling */
+.inventory-assignments-container a {
+    color: #28a745;
+    text-decoration: none;
+    transition: color 0.15s ease-in-out;
+}
+
+.inventory-assignments-container a:hover {
+    color: #1e7e34;
+    text-decoration: underline;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .inventory-assignments-container .table-responsive {
+        font-size: 0.85rem;
+    }
+    
+    .inventory-assignments-container .card-header h3 {
+        font-size: 1.1rem;
+    }
+    
+    .inventory-assignments-container .btn-group-sm .btn {
+        padding: 0.2rem 0.4rem;
+        font-size: 0.8rem;
+    }
+}
+
+/* History row styling */
+.inventory-assignments-container .history-row {
+    background-color: #f8f9fa;
+    border-left: 4px solid #28a745;
+}
+
+.inventory-assignments-container .history-row td {
+    border-top: none;
+    padding: 0;
+}
+
+.inventory-assignments-container .history-row .table {
+    margin-bottom: 0;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.inventory-assignments-container .history-row .table th {
+    background-color: #e9ecef;
+    color: #495057;
+    font-size: 0.8rem;
+    padding: 8px 12px;
+}
+
+.inventory-assignments-container .history-row .table td {
+    font-size: 0.85rem;
+    padding: 8px 12px;
+}
+
+/* Loading animation */
+.inventory-assignments-container .loading {
+    text-align: center;
+    color: #6c757d;
+}
+
+.animate-spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* History action buttons */
+.inventory-assignments-container .show-history {
+    transition: all 0.2s ease;
+}
+
+.inventory-assignments-container .show-history:hover {
+    background-color: #17a2b8;
+    border-color: #17a2b8;
+    color: white;
+}
+
+/* User action styling */
+.inventory-assignments-container .text-danger {
+    color: #dc3545 !important;
+}
+
+.inventory-assignments-container .text-success {
+    color: #28a745 !important;
+}
