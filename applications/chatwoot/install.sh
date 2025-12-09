@@ -77,9 +77,9 @@ REDIS_PASSWORD=$(openssl rand -hex 16)
 sed -i "s|POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$POSTGRES_PASSWORD|g" .env
 sed -i "s|REDIS_PASSWORD=.*|REDIS_PASSWORD=$REDIS_PASSWORD|g" .env
 
-# Update docker-compose.yaml with same passwords
-sed -i "s|POSTGRES_PASSWORD:.*|POSTGRES_PASSWORD: $POSTGRES_PASSWORD|g" docker-compose.yaml
-sed -i "s|REDIS_PASSWORD:.*|REDIS_PASSWORD: $REDIS_PASSWORD|g" docker-compose.yaml
+# The docker-compose file uses environment variable interpolation for
+# POSTGRES_PASSWORD/REDIS_PASSWORD (see docker-compose.yaml). We update
+# the `.env` file above so docker-compose picks the passwords from there.
 
 print_status "Configuration files downloaded and configured."
 
