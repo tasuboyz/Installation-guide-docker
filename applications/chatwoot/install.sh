@@ -51,8 +51,17 @@ print_status "Installation directory: $INSTALL_DIR"
 
 # Download configuration files
 print_status "Downloading configuration files..."
+
+# Download .env template (will be customized below)
 wget -O .env https://raw.githubusercontent.com/chatwoot/chatwoot/develop/.env.example
-wget -O docker-compose.yaml https://raw.githubusercontent.com/chatwoot/chatwoot/develop/docker-compose.production.yaml
+
+# Use local docker-compose.yaml if it exists (already configured), otherwise download
+if [[ ! -f docker-compose.yaml ]]; then
+    wget -O docker-compose.yaml https://raw.githubusercontent.com/chatwoot/chatwoot/develop/docker-compose.production.yaml
+    print_status "Downloaded docker-compose.yaml from upstream"
+else
+    print_status "Using existing docker-compose.yaml"
+fi
 
 # Generate SECRET_KEY_BASE
 SECRET_KEY_BASE=$(openssl rand -hex 64)
@@ -105,6 +114,23 @@ fi
 # the `.env` file above so docker-compose picks the passwords from there.
 
 print_status "Configuration files downloaded and configured."
+
+# Show generated credentials for reference
+print_status "Generated credentials:"
+echo "  POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
+echo "  REDIS_PASSWORD=$REDIS_PASSWORD"
+
+# Verify .env has required variables before proceeding
+print_status "Verifying .env configuration..."
+if ! grep -q '^POSTGRES_PASSWORD=.\+' .env; then
+    print_error "POSTGRES_PASSWORD is empty or missing in .env. Aborting."
+    exit 1
+fi
+if ! grep -q '^REDIS_PASSWORD=.\+' .env; then
+    print_error "REDIS_PASSWORD is empty or missing in .env. Aborting."
+    exit 1
+fi
+print_status ".env verification passed."
 
 # Prepare the database
 print_status "Preparing the database..."
