@@ -40,6 +40,8 @@ services:
   postgres:
     image: pgvector/pgvector:pg16
     restart: always
+    env_file:
+      - .env
     # Expose Postgres on the host for LAN access if needed. Keep this
     # restricted or use firewall rules in production.
     ports:
