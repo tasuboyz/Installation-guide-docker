@@ -56,15 +56,29 @@ wget -O docker-compose.yaml https://raw.githubusercontent.com/chatwoot/chatwoot/
 
 # Generate SECRET_KEY_BASE
 SECRET_KEY_BASE=$(openssl rand -hex 64)
-sed -i "s|SECRET_KEY_BASE=.*|SECRET_KEY_BASE=$SECRET_KEY_BASE|g" .env
 
-# Set RAILS_ENV to production
-sed -i "s|RAILS_ENV=.*|RAILS_ENV=production|g" .env
+# Ensure SECRET_KEY_BASE is present in .env
+if grep -q '^SECRET_KEY_BASE=' .env 2>/dev/null; then
+    sed -i "s|^SECRET_KEY_BASE=.*|SECRET_KEY_BASE=$SECRET_KEY_BASE|g" .env
+else
+    echo "SECRET_KEY_BASE=$SECRET_KEY_BASE" >> .env
+fi
+
+# Set or ensure RAILS_ENV to production
+if grep -q '^RAILS_ENV=' .env 2>/dev/null; then
+    sed -i "s|^RAILS_ENV=.*|RAILS_ENV=production|g" .env
+else
+    echo "RAILS_ENV=production" >> .env
+fi
 
 # Prompt for domain/frontend URL
 read -p "Enter your domain (e.g., chat.yourdomain.com): " DOMAIN
 if [[ -n "$DOMAIN" ]]; then
-    sed -i "s|FRONTEND_URL=.*|FRONTEND_URL=https://$DOMAIN|g" .env
+        if grep -q '^FRONTEND_URL=' .env 2>/dev/null; then
+            sed -i "s|^FRONTEND_URL=.*|FRONTEND_URL=https://$DOMAIN|g" .env
+        else
+            echo "FRONTEND_URL=https://$DOMAIN" >> .env
+        fi
 else
     print_warning "No domain provided. You can configure FRONTEND_URL later in .env"
 fi
@@ -73,9 +87,18 @@ fi
 POSTGRES_PASSWORD=$(openssl rand -hex 16)
 REDIS_PASSWORD=$(openssl rand -hex 16)
 
-# Update .env with passwords
-sed -i "s|POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$POSTGRES_PASSWORD|g" .env
-sed -i "s|REDIS_PASSWORD=.*|REDIS_PASSWORD=$REDIS_PASSWORD|g" .env
+# Update or append .env with passwords (upsert)
+if grep -q '^POSTGRES_PASSWORD=' .env 2>/dev/null; then
+    sed -i "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$POSTGRES_PASSWORD|g" .env
+else
+    echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD" >> .env
+fi
+
+if grep -q '^REDIS_PASSWORD=' .env 2>/dev/null; then
+    sed -i "s|^REDIS_PASSWORD=.*|REDIS_PASSWORD=$REDIS_PASSWORD|g" .env
+else
+    echo "REDIS_PASSWORD=$REDIS_PASSWORD" >> .env
+fi
 
 # The docker-compose file uses environment variable interpolation for
 # POSTGRES_PASSWORD/REDIS_PASSWORD (see docker-compose.yaml). We update
