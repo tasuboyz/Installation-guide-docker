@@ -1,0 +1,244 @@
+# Services Configuration Examples for Nginx Proxy + SSL
+# Esempi di configurazione per diversi scenari
+
+# =============================================================================
+# SCENARIO 1: Servizio Standard (Chatwoot)
+# =============================================================================
+services:
+  chatwoot-rails:
+    image: chatwoot/chatwoot:latest
+    environment:
+      # Nginx proxy configuration
+      - VIRTUAL_HOST=chatwoot.example.com
+      - VIRTUAL_PORT=3000
+      - LETSENCRYPT_HOST=chatwoot.example.com
+      - LETSENCRYPT_EMAIL=admin@example.com
+      
+      # Chatwoot specific
+      - FRONTEND_URL=https://chatwoot.example.com
+      - RAILS_ENV=production
+    networks:
+      - glpi-net
+    expose:
+      - "3000"
+    restart: unless-stopped
+
+# =============================================================================
+# SCENARIO 2: Workflow Engine (n8n)
+# =============================================================================
+services:
+  n8n:
+    image: n8nio/n8n:latest
+    environment:
+      # Nginx proxy configuration
+      - VIRTUAL_HOST=n8n.example.com
+      - VIRTUAL_PORT=5678
+      - LETSENCRYPT_HOST=n8n.example.com
+      - LETSENCRYPT_EMAIL=admin@example.com
+      
+      # n8n specific configuration
+      - N8N_HOST=n8n.example.com
+      - N8N_PROTOCOL=https
+      - N8N_PORT=5678
+      - WEBHOOK_URL=https://n8n.example.com/
+      - NODE_ENV=production
+      
+      # Database connection (example)
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=n8n-db
+      - DB_POSTGRESDB_DATABASE=n8n
+      - DB_POSTGRESDB_USER=n8n
+      - DB_POSTGRESDB_PASSWORD=changeme
+    networks:
+      - glpi-net
+    expose:
+      - "5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+    restart: unless-stopped
+
+# =============================================================================
+# SCENARIO 3: GLPI con Virtual Path
+# =============================================================================
+services:
+  glpi:
+    image: diouxx/glpi:latest
+    environment:
+      # Nginx proxy configuration
+      - VIRTUAL_HOST=support.example.com
+      - VIRTUAL_PORT=80
+      - LETSENCRYPT_HOST=support.example.com
+      - LETSENCRYPT_EMAIL=admin@example.com
+      
+      # GLPI specific
+      - GLPI_INSTALL=false
+      - GLPI_REMOVE_INSTALLER=true
+    networks:
+      - glpi-net
+    expose:
+      - "80"
+    volumes:
+      - glpi-data:/var/www/html/glpi
+    restart: unless-stopped
+
+# =============================================================================
+# SCENARIO 4: Servizio con Multiple Subdomains
+# =============================================================================
+services:
+  app:
+    image: myapp:latest
+    environment:
+      # Multiple domains per lo stesso servizio
+      - VIRTUAL_HOST=app.example.com,app.example.org,www.app.example.com
+      - VIRTUAL_PORT=8080
+      - LETSENCRYPT_HOST=app.example.com,app.example.org,www.app.example.com
+      - LETSENCRYPT_EMAIL=admin@example.com
+    networks:
+      - glpi-net
+    expose:
+      - "8080"
+    restart: unless-stopped
+
+# =============================================================================
+# SCENARIO 5: Grafana con Authentication
+# =============================================================================
+services:
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      # Nginx proxy configuration
+      - VIRTUAL_HOST=grafana.example.com
+      - VIRTUAL_PORT=3000
+      - LETSENCRYPT_HOST=grafana.example.com
+      - LETSENCRYPT_EMAIL=admin@example.com
+      
+      # Grafana behind proxy
+      - GF_SERVER_ROOT_URL=https://grafana.example.com
+      - GF_SERVER_SERVE_FROM_SUB_PATH=false
+      - GF_SECURITY_ADMIN_PASSWORD=changeme
+    networks:
+      - glpi-net
+    expose:
+      - "3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    restart: unless-stopped
+
+# =============================================================================
+# SCENARIO 6: API Backend con Rate Limiting
+# =============================================================================
+services:
+  api:
+    image: myapi:latest
+    environment:
+      - VIRTUAL_HOST=api.example.com
+      - VIRTUAL_PORT=3000
+      - LETSENCRYPT_HOST=api.example.com
+      - LETSENCRYPT_EMAIL=admin@example.com
+      
+      # Custom nginx config per rate limiting
+      # Crea file: /etc/nginx/vhost.d/api.example.com_location
+      # Con contenuto:
+      # limit_req zone=api burst=20 nodelay;
+    networks:
+      - glpi-net
+    expose:
+      - "3000"
+    restart: unless-stopped
+
+# =============================================================================
+# SCENARIO 7: WebSocket Server (esempio Telegram Bot API)
+# =============================================================================
+services:
+  telegram-bot-api:
+    build: .
+    environment:
+      - VIRTUAL_HOST=telegram.example.com
+      - VIRTUAL_PORT=8081
+      - LETSENCRYPT_HOST=telegram.example.com
+      - LETSENCRYPT_EMAIL=admin@example.com
+      
+      # Bot API specific
+      - TELEGRAM_API_ID=your_api_id
+      - TELEGRAM_API_HASH=your_api_hash
+    networks:
+      - glpi-net
+    expose:
+      - "8081"
+    restart: unless-stopped
+
+# =============================================================================
+# SCENARIO 8: Staging Environment (Let's Encrypt Staging)
+# =============================================================================
+services:
+  app-staging:
+    image: myapp:staging
+    environment:
+      - VIRTUAL_HOST=staging.example.com
+      - VIRTUAL_PORT=8080
+      - LETSENCRYPT_HOST=staging.example.com
+      - LETSENCRYPT_EMAIL=admin@example.com
+      
+      # Usa staging environment per evitare rate limits durante test
+      # Configura in nginx-proxy .env:
+      # ACME_CA_URI=https://acme-staging-v02.api.letsencrypt.org/directory
+    networks:
+      - glpi-net
+    expose:
+      - "8080"
+    restart: unless-stopped
+
+# =============================================================================
+# SCENARIO 9: Servizio con Basic Auth
+# =============================================================================
+services:
+  protected-app:
+    image: myapp:latest
+    environment:
+      - VIRTUAL_HOST=admin.example.com
+      - VIRTUAL_PORT=8080
+      - LETSENCRYPT_HOST=admin.example.com
+      - LETSENCRYPT_EMAIL=admin@example.com
+      
+      # Per aggiungere basic auth, crea:
+      # /etc/nginx/htpasswd/admin.example.com
+      # Con: htpasswd -c /etc/nginx/htpasswd/admin.example.com username
+    networks:
+      - glpi-net
+    expose:
+      - "8080"
+    restart: unless-stopped
+
+# =============================================================================
+# SCENARIO 10: Database Backend (non esposto direttamente)
+# =============================================================================
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      - POSTGRES_PASSWORD=changeme
+      - POSTGRES_DB=mydb
+      
+      # NO VIRTUAL_HOST = non raggiungibile da internet
+      # Solo servizi interni sulla stessa rete possono connettersi
+    networks:
+      - glpi-net
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+# =============================================================================
+# NETWORKS CONFIGURATION
+# =============================================================================
+networks:
+  glpi-net:
+    external: true
+
+# =============================================================================
+# VOLUMES CONFIGURATION
+# =============================================================================
+volumes:
+  n8n_data:
+  glpi-data:
+  grafana-data:
+  postgres-data:

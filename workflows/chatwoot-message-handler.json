@@ -1,0 +1,289 @@
+{
+  "name": "Chatwoot → n8n: Gestione Conversazioni",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "chatwoot-webhook",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Chatwoot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 300],
+      "webhookId": "chatwoot-events"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"event\"]}}",
+              "operation": "equals",
+              "value2": "message_created"
+            }
+          ]
+        }
+      },
+      "id": "check-event-type",
+      "name": "Nuovo Messaggio?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"message_type\"]}}",
+              "operation": "equals",
+              "value2": "incoming"
+            }
+          ]
+        }
+      },
+      "id": "check-message-direction",
+      "name": "Messaggio Cliente?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 250]
+    },
+    {
+      "parameters": {
+        "functionCode": "// Estrai informazioni dal webhook Chatwoot\nconst event = $input.item.json;\n\nconst conversationData = {\n  conversationId: event.id,\n  accountId: event.account?.id,\n  inboxId: event.inbox?.id,\n  contactId: event.sender?.id,\n  contactName: event.sender?.name,\n  contactEmail: event.sender?.email,\n  contactPhone: event.sender?.phone_number,\n  messageContent: event.content,\n  messageType: event.message_type,\n  conversationStatus: event.conversation?.status,\n  assignedAgent: event.conversation?.assignee?.name,\n  timestamp: event.created_at\n};\n\nreturn { json: conversationData };"
+      },
+      "id": "parse-webhook",
+      "name": "Elabora Dati",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [850, 250]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO chatwoot_messages (conversation_id, contact_name, contact_email, message_content, created_at) VALUES ({{$json[\"conversationId\"]}}, '{{$json[\"contactName\"]}}', '{{$json[\"contactEmail\"]}}', '{{$json[\"messageContent\"]}}', NOW())",
+        "options": {}
+      },
+      "id": "save-to-db",
+      "name": "Salva in Database",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.2,
+      "position": [1050, 250],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "n8n-postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"messageContent\"]}}",
+              "operation": "contains",
+              "value2": "urgente"
+            }
+          ]
+        }
+      },
+      "id": "check-urgency",
+      "name": "Messaggio Urgente?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1250, 250]
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "requestMethod": "POST",
+        "url": "https://chatwoot.tuodominio.com/api/v1/accounts/{{$json[\"accountId\"]}}/conversations/{{$json[\"conversationId\"]}}/messages",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "Messaggio urgente ricevuto! Un operatore ti risponderà a breve."
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-auto-reply",
+      "name": "Invia Risposta Automatica",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1450, 150],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2",
+          "name": "Chatwoot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "notifiche@tuodominio.com",
+        "toEmail": "support@tuodominio.com",
+        "subject": "🚨 Messaggio Urgente da {{$json[\"contactName\"]}}",
+        "emailFormat": "html",
+        "text": "=<h2>Nuovo messaggio urgente</h2>\n<p><strong>Da:</strong> {{$json[\"contactName\"]}} ({{$json[\"contactEmail\"]}})</p>\n<p><strong>Conversazione:</strong> <a href=\"https://chatwoot.tuodominio.com/app/accounts/{{$json[\"accountId\"]}}/conversations/{{$json[\"conversationId\"]}}\">Apri in Chatwoot</a></p>\n<p><strong>Messaggio:</strong></p>\n<blockquote>{{$json[\"messageContent\"]}}</blockquote>\n<p><em>Ricevuto: {{$json[\"timestamp\"]}}</em></p>",
+        "options": {}
+      },
+      "id": "send-email-alert",
+      "name": "Invia Email Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [1450, 250],
+      "credentials": {
+        "smtp": {
+          "id": "3",
+          "name": "SMTP Account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json[\"event\"]}}",
+              "operation": "equals",
+              "value2": "conversation_status_changed"
+            }
+          ]
+        }
+      },
+      "id": "check-status-change",
+      "name": "Cambio Status?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 400]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE chatwoot_conversations SET status = '{{$json[\"conversation\"][\"status\"]}}', updated_at = NOW() WHERE conversation_id = {{$json[\"id\"]}}",
+        "options": {}
+      },
+      "id": "update-status",
+      "name": "Aggiorna Status DB",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.2,
+      "position": [850, 400],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "n8n-postgres"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Chatwoot Webhook": {
+      "main": [
+        [
+          {
+            "node": "Nuovo Messaggio?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Nuovo Messaggio?": {
+      "main": [
+        [
+          {
+            "node": "Messaggio Cliente?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cambio Status?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Messaggio Cliente?": {
+      "main": [
+        [
+          {
+            "node": "Elabora Dati",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Elabora Dati": {
+      "main": [
+        [
+          {
+            "node": "Salva in Database",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salva in Database": {
+      "main": [
+        [
+          {
+            "node": "Messaggio Urgente?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Messaggio Urgente?": {
+      "main": [
+        [
+          {
+            "node": "Invia Risposta Automatica",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Invia Email Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cambio Status?": {
+      "main": [
+        [
+          {
+            "node": "Aggiorna Status DB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

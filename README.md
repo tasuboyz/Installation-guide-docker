@@ -1,15 +1,19 @@
 # 🐳 Installation Guide Docker
 
-Documentazione per l'installazione e configurazione di un ecosistema containerizzato.
+Documentazione per l'installazione e configurazione di un ecosistema containerizzato con n8n, Chatwoot, GLPI e reverse proxy SSL.
+
+## 🚀 Quick Start
+
+**Vuoi installare tutto rapidamente?** Segui la [**Guida Rapida**](QUICK-START.md) per deployment completo con SSL in 30 minuti.
 
 ## 📁 Struttura Repository
 
 ```
 ├── core-ecosystem/          # Infrastruttura principale
 ├── applications/            # Applicazioni opzionali
-├── reference/               # Documenti di riferimento
-├── workflows/               # Workflow n8n
-└── glpi-plugins/            # Plugin GLPI
+├── workflows/               # Workflow n8n e integrazioni
+├── glpi-plugins/            # Plugin GLPI
+└── reference/               # Documenti di riferimento
 ```
 
 ---
@@ -21,9 +25,10 @@ Guide per l'installazione dell'infrastruttura principale (seguire l'ordine numer
 | # | Guida | Descrizione |
 |---|-------|-------------|
 | 1 | [Docker & Portainer](core-ecosystem/01-docker-portainer.md) | Installazione Docker e Portainer |
-| 2 | [Rete Docker](core-ecosystem/02-docker-network.md) | Creazione della rete condivisa |
+| 2 | [Rete Docker](core-ecosystem/02-docker-network.md) | Creazione della rete condivisa `glpi-net` |
 | 3 | [GLPI](core-ecosystem/03-glpi-installation.md) | Sistema di gestione IT con MariaDB |
 | 4 | [n8n](core-ecosystem/04-n8n-installation.md) | Piattaforma di automazione con PostgreSQL |
+| 5 | [Nginx Proxy + SSL](core-ecosystem/05-nginx-certbot-ssl.md) | ⭐ **Reverse proxy con certificati SSL automatici** |
 
 ---
 
@@ -31,12 +36,13 @@ Guide per l'installazione dell'infrastruttura principale (seguire l'ordine numer
 
 Applicazioni aggiuntive (installazione opzionale):
 
-| Applicazione | Descrizione |
-|--------------|-------------|
-| [Chatwoot](applications/chatwoot/README.md) | Piattaforma di supporto clienti |
-| [EspoCRM](applications/espocrm/README.md) | Sistema CRM |
-| [Grafana](applications/grafana/README.md) | Dashboard e monitoraggio |
-| [Telegram Bot API](applications/telegram-bot-api/README.md) | Server Telegram Bot API personalizzato |
+| Applicazione | Descrizione | Integrazione |
+|--------------|-------------|--------------|
+| [Chatwoot](applications/chatwoot/README.md) | Piattaforma di supporto clienti | ✅ n8n, SSL |
+| [Nginx Proxy](applications/nginx-proxy/README.md) | ⭐ **Reverse proxy + Certbot SSL** | ✅ Tutti i servizi |
+| [EspoCRM](applications/espocrm/README.md) | Sistema CRM | - |
+| [Grafana](applications/grafana/README.md) | Dashboard e monitoraggio | ✅ Metriche servizi |
+| [Telegram Bot API](applications/telegram-bot-api/README.md) | Server Telegram Bot API personalizzato | ✅ n8n, Chatwoot |
 
 ---
 
@@ -52,12 +58,24 @@ Documenti di consultazione rapida:
 
 ---
 
-## ⚙️ Workflow n8n
+## ⚙️ Workflow n8n e Integrazioni
 
-Workflow di automazione per n8n:
+Workflow di automazione e guide integrazione:
 
-- `workflows/log_associazioni.json` - Automazione log GLPI
-- `workflows/mail_associazioni.json` - Automazione email GLPI
+| Workflow | Tipo | Descrizione |
+|----------|------|-------------|
+| [Guida Integrazione Completa](workflows/README.md) | 📖 Documentazione | ⭐ **Guida completa n8n ↔ Chatwoot con webhook** |
+| `chatwoot-message-handler.json` | Chatwoot → n8n | Gestione automatica messaggi, notifiche, DB |
+| `n8n-to-chatwoot-messages.json` | n8n → Chatwoot | Follow-up automatici, invio messaggi via API |
+| `log_associazioni.json` | GLPI | Automazione log assegnazioni GLPI |
+| `mail_associazioni.json` | GLPI | Automazione email notifiche GLPI |
+
+**Highlights:**
+- ✅ Webhook Chatwoot → n8n per eventi real-time
+- ✅ API n8n → Chatwoot per messaggi automatici
+- ✅ Persistenza database per analytics
+- ✅ Risposte automatiche intelligenti
+- ✅ Integrazione GLPI per ticket automatici
 
 ---
 
@@ -66,3 +84,4 @@ Workflow di automazione per n8n:
 Plugin personalizzati per GLPI:
 
 - [Inventory Assignments](glpi-plugins/inventoryassignments/README.md) - Gestione assegnazioni inventario
+- [AI Chat Assistant](glpi-plugins/aichatassistant/CONFRONTO_PLUGIN.md) - Assistente AI per GLPI

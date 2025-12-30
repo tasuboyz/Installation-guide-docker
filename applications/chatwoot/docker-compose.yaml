@@ -15,14 +15,26 @@ services:
     # Bind rails to all host interfaces so the app is reachable from LAN.
     # Using '3000:3000' binds to 0.0.0.0 on the host. For local-only access
     # keep the previous '127.0.0.1:3000:3000' mapping.
+    # Comment out 'ports' when using nginx-proxy (expose instead)
     ports:
       - '3000:3000'
+    expose:
+      - "3000"
     environment:
       - NODE_ENV=production
       - RAILS_ENV=production
       - INSTALLATION_ENV=docker
+      # Uncomment and configure these for nginx-proxy + SSL:
+      # - VIRTUAL_HOST=chatwoot.example.com
+      # - VIRTUAL_PORT=3000
+      # - LETSENCRYPT_HOST=chatwoot.example.com
+      # - LETSENCRYPT_EMAIL=admin@example.com
     entrypoint: docker/entrypoints/rails.sh
     command: ['bundle', 'exec', 'rails', 's', '-p', '3000', '-b', '0.0.0.0']
+    networks:
+      - default
+      # Uncomment to use nginx-proxy:
+      # - glpi-net
     restart: always
 
   sidekiq:
@@ -65,3 +77,10 @@ volumes:
   storage_data:
   postgres_data:
   redis_data:
+
+networks:
+  default:
+    driver: bridge
+  # Uncomment to connect to nginx-proxy:
+  # glpi-net:
+  #   external: true

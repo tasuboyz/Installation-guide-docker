@@ -24,6 +24,8 @@ docker run --name n8n-postgres \
 ```
 
 ## 3. Avvio del container n8n
+
+### Opzione A: Accesso diretto (senza SSL)
 ```bash
 docker run --name n8n \
   --network glpi-net \
@@ -42,10 +44,54 @@ docker run --name n8n \
   -d n8nio/n8n:latest
 ```
 
+### Opzione B: Con Nginx Reverse Proxy + SSL (raccomandato per produzione)
+
+**Prerequisiti**: Completa prima l'installazione di [nginx-proxy](05-nginx-certbot-ssl.md)
+
+```bash
+docker run --name n8n \
+  --network glpi-net \
+  --expose 5678 \
+  -e VIRTUAL_HOST=n8n.tuodominio.com \
+  -e VIRTUAL_PORT=5678 \
+  -e LETSENCRYPT_HOST=n8n.tuodominio.com \
+  -e LETSENCRYPT_EMAIL=admin@tuodominio.com \
+  -e DB_TYPE=postgresdb \
+  -e DB_POSTGRESDB_HOST=n8n-postgres \
+  -e DB_POSTGRESDB_PORT=5432 \
+  -e DB_POSTGRESDB_DATABASE=n8ndb \
+  -e DB_POSTGRESDB_USER=n8n \
+  -e DB_POSTGRESDB_PASSWORD=n8npass \
+  -e N8N_HOST=n8n.tuodominio.com \
+  -e N8N_PROTOCOL=https \
+  -e N8N_PORT=5678 \
+  -e WEBHOOK_URL=https://n8n.tuodominio.com/ \
+  -e N8N_BASIC_AUTH_ACTIVE=true \
+  -e N8N_BASIC_AUTH_USER=admin \
+  -e N8N_BASIC_AUTH_PASSWORD=adminpass \
+  -v n8n-data:/home/node/.n8n \
+  -d n8nio/n8n:latest
+```
+
+**Note importanti per SSL:**
+- Sostituisci `n8n.tuodominio.com` con il tuo dominio
+- Assicurati che il record DNS punti al server
+- Usa `--expose` invece di `-p` per non esporre la porta direttamente
+- Configura `N8N_PROTOCOL=https` e `WEBHOOK_URL` per webhook esterni
+
 ## 4. Accesso al servizio
+
+### Senza SSL (Opzione A)
 - n8n: `http://<IP_SERVER>:5678`
 - Username: `admin`
 - Password: `adminpass`
+
+### Con SSL (Opzione B)
+- n8n: `https://n8n.tuodominio.com`
+- Username: `admin`
+- Password: `adminpass`
+
+**Nota**: Attendi 1-2 minuti dopo l'avvio per l'emissione del certificato SSL
 
 ## 5. Configurazione accesso a GLPI (MariaDB)
 Per permettere a n8n di accedere al database di GLPI, configura una credenziale MySQL/MariaDB in n8n:

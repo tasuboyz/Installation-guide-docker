@@ -1,0 +1,372 @@
+{
+  "name": "n8n → Chatwoot: Invio Messaggi Automatici",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * *"
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Ogni mattina alle 9:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT conversation_id, account_id, contact_name, last_message_at FROM chatwoot_conversations WHERE status = 'open' AND last_message_at < NOW() - INTERVAL '24 hours' AND assigned_agent IS NOT NULL",
+        "options": {}
+      },
+      "id": "query-inactive",
+      "name": "Trova Conversazioni Inattive",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.2,
+      "position": [450, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "n8n-postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "requestMethod": "POST",
+        "url": "https://chatwoot.tuodominio.com/api/v1/accounts/={{$json[\"account_id\"]}}/conversations/={{$json[\"conversation_id\"]}}/messages",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "Ciao {{$json[\"contact_name\"]}}, è passato un po' di tempo dall'ultimo messaggio. Possiamo aiutarti con qualcos'altro?"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": false
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-followup",
+      "name": "Invia Follow-up",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [650, 300],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2",
+          "name": "Chatwoot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE chatwoot_conversations SET last_followup_at = NOW() WHERE conversation_id = {{$json[\"conversation_id\"]}}",
+        "options": {}
+      },
+      "id": "update-followup-time",
+      "name": "Aggiorna Timestamp",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.2,
+      "position": [850, 300],
+      "credentials": {
+        "postgres": {
+          "id": "1",
+          "name": "n8n-postgres"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "send-chatwoot-message",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-manual",
+      "name": "Webhook Manuale",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [250, 500],
+      "webhookId": "manual-message"
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "requestMethod": "GET",
+        "url": "https://chatwoot.tuodominio.com/api/v1/accounts/={{$json[\"body\"][\"account_id\"]}}/contacts/search?q={{$json[\"body\"][\"contact_email\"]}}",
+        "options": {}
+      },
+      "id": "find-contact",
+      "name": "Trova Contatto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [450, 500],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2",
+          "name": "Chatwoot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json[\"payload\"].length}}",
+              "operation": "largerEqual",
+              "value2": 1
+            }
+          ]
+        }
+      },
+      "id": "contact-exists",
+      "name": "Contatto Esiste?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [650, 500]
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "requestMethod": "POST",
+        "url": "https://chatwoot.tuodominio.com/api/v1/accounts/={{$json[\"body\"][\"account_id\"]}}/contacts",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "name",
+              "value": "={{$json[\"body\"][\"contact_name\"]}}"
+            },
+            {
+              "name": "email",
+              "value": "={{$json[\"body\"][\"contact_email\"]}}"
+            },
+            {
+              "name": "inbox_id",
+              "value": "={{$json[\"body\"][\"inbox_id\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "create-contact",
+      "name": "Crea Nuovo Contatto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 600],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2",
+          "name": "Chatwoot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "requestMethod": "POST",
+        "url": "https://chatwoot.tuodominio.com/api/v1/accounts/={{$json[\"body\"][\"account_id\"]}}/conversations",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "source_id",
+              "value": "={{$json[\"payload\"][0][\"id\"] || $json[\"payload\"][\"id\"]}}"
+            },
+            {
+              "name": "inbox_id",
+              "value": "={{$json[\"body\"][\"inbox_id\"]}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "create-conversation",
+      "name": "Crea Conversazione",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1050, 500],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2",
+          "name": "Chatwoot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "requestMethod": "POST",
+        "url": "https://chatwoot.tuodominio.com/api/v1/accounts/={{$json[\"body\"][\"account_id\"]}}/conversations/={{$json[\"id\"]}}/messages",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{$json[\"body\"][\"message\"]}}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "send-message",
+      "name": "Invia Messaggio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1250, 500],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "2",
+          "name": "Chatwoot API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"success\": true, \"conversation_id\": $json[\"conversation_id\"], \"message_id\": $json[\"id\"] } }}"
+      },
+      "id": "response-success",
+      "name": "Risposta Successo",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1450, 500]
+    }
+  ],
+  "connections": {
+    "Ogni mattina alle 9:00": {
+      "main": [
+        [
+          {
+            "node": "Trova Conversazioni Inattive",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trova Conversazioni Inattive": {
+      "main": [
+        [
+          {
+            "node": "Invia Follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invia Follow-up": {
+      "main": [
+        [
+          {
+            "node": "Aggiorna Timestamp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Manuale": {
+      "main": [
+        [
+          {
+            "node": "Trova Contatto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Trova Contatto": {
+      "main": [
+        [
+          {
+            "node": "Contatto Esiste?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contatto Esiste?": {
+      "main": [
+        [
+          {
+            "node": "Crea Conversazione",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Crea Nuovo Contatto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crea Nuovo Contatto": {
+      "main": [
+        [
+          {
+            "node": "Crea Conversazione",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crea Conversazione": {
+      "main": [
+        [
+          {
+            "node": "Invia Messaggio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invia Messaggio": {
+      "main": [
+        [
+          {
+            "node": "Risposta Successo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
