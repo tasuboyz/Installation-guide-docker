@@ -130,10 +130,12 @@ if [[ "$SSL_MODE" == "2" ]]; then
     ACME_CA_URI="https://acme-staging-v02.api.letsencrypt.org/directory"
     print_warning "Modalità STAGING attivata - i certificati NON saranno fidati dai browser"
     echo "LETSENCRYPT_EMAIL=$LETSENCRYPT_EMAIL" > .env
+    echo "DOCKER_NETWORK=$DOCKER_NETWORK" >> .env
     echo "ACME_CA_URI=$ACME_CA_URI" >> .env
 else
     print_status "Modalità PRODUZIONE attivata"
     echo "LETSENCRYPT_EMAIL=$LETSENCRYPT_EMAIL" > .env
+    echo "DOCKER_NETWORK=$DOCKER_NETWORK" >> .env
 fi
 
 # Check if nginx-proxy is already running
