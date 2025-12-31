@@ -37,7 +37,7 @@ EOF
 }
 
 # Parse CLI args
-DOCKER_NETWORK="glpi-net"
+DOCKER_NETWORK=""
 SSL_MODE=1
 AUTO_CONFIRM=0
 LETSENCRYPT_EMAIL=""
@@ -75,6 +75,22 @@ print_header "Nginx Reverse Proxy + SSL Installation"
 
 echo ""
 print_header "Configurazione Rete Docker"
+
+# Load existing .env if present so user settings (like DOCKER_NETWORK) are respected
+if [[ -f .env ]]; then
+    # shellcheck disable=SC1091
+    source .env || true
+fi
+
+# If network not provided via CLI or .env, ask user (or require in non-interactive)
+if [[ -z "${DOCKER_NETWORK:-}" ]]; then
+    if [[ $AUTO_CONFIRM -eq 1 ]]; then
+        print_error "--network required in non-interactive mode"
+        exit 1
+    fi
+    read -p "Inserisci il nome della rete Docker da usare (default: glpi-net): " DOCKER_NETWORK
+    DOCKER_NETWORK=${DOCKER_NETWORK:-glpi-net}
+fi
 
 print_status "Reti Docker esistenti:"
 docker network ls --format "table {{.Name}}\t{{.Driver}}\t{{.Scope}}" | grep -v "bridge\|host\|none" || echo "  (nessuna rete custom trovata)"
