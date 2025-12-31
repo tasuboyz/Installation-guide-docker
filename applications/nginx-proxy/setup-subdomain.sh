@@ -176,6 +176,87 @@ if [[ -z "$BACKEND_URL" ]]; then
     BACKEND_URL="http://${CONTAINER_NAME}:${INTERNAL_PORT}"
 fi
 
+# Decide certificate mode: respect ACME_CA_URI in .env or default to production
+PRODUCTION_MODE=1
+if [[ -f .env ]]; then
+    source .env || true
+fi
+if [[ -n "${ACME_CA_URI:-}" ]]; then
+    PRODUCTION_MODE=0
+fi
+
+# Helper: get server public IP
+get_public_ip() {
+    curl -s https://api.ipify.org || echo ""
+}
+
+# Helper: check if domain resolves to server IP or is reachable on port 80
+check_domain_reachable() {
+    local domain=$1
+    # Get A/AAAA records
+    local adds
+    if command -v dig &> /dev/null; then
+        adds=$(dig +short A "$domain" | tr '\n' ' ')
+        adds_ipv6=$(dig +short AAAA "$domain" | tr '\n' ' ')
+    elif command -v nslookup &> /dev/null; then
+        adds=$(nslookup -type=A "$domain" 2>/dev/null | awk '/^Address: /{print $2}' | tr '\n' ' ')
+        adds_ipv6=$(nslookup -type=AAAA "$domain" 2>/dev/null | awk '/^Address: /{print $2}' | tr '\n' ' ')
+    else
+        return 1
+    fi
+
+    local pubip
+    pubip=$(get_public_ip)
+
+    # If any A record equals public IP, consider reachable
+    for ip in $adds; do
+        if [[ "$ip" == "$pubip" ]]; then
+            return 0
+        fi
+    done
+
+    # If HTTP reachable (non-empty response) consider reachable (covers proxied/CDN)
+    if command -v curl &> /dev/null; then
+        if curl -sSL --max-time 5 "http://${domain}/.well-known/acme-challenge/" >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+
+    return 1
+}
+
+# If production desired, but domain not yet reachable, use staging temporarily and wait
+wait_for_dns_and_switch_to_production() {
+    local domain=$1
+    local timeout_minutes=15
+    local waited=0
+    local interval=15
+
+    print_status "Controllo raggiungibilità di ${domain} (timeout ${timeout_minutes}m)..."
+
+    while ! check_domain_reachable "$domain"; do
+        if (( waited >= timeout_minutes * 60 )); then
+            print_warning "Timeout raggiunto: il dominio ${domain} non è ancora raggiungibile."
+            return 1
+        fi
+        sleep $interval
+        waited=$((waited + interval))
+        print_status "Attesa DNS... (${waited}s)"
+    done
+
+    print_status "Dominio raggiungibile: ${domain}"
+
+    # If we were using staging, switch to production by removing ACME_CA_URI and restarting acme-companion
+    if [[ -n "${ACME_CA_URI:-}" ]]; then
+        print_status "Passo a produzione: ricreo acme-companion senza ACME_CA_URI"
+        # Update .env: remove ACME_CA_URI
+        sed -i '/^ACME_CA_URI=/d' .env || true
+        # Restart acme companion (recreate)
+        docker compose up -d --no-deps --remove-orphans acme-companion || true
+    fi
+    return 0
+}
+
 # Confirm configuration
 echo ""
 print_header "Configuration Summary"
@@ -270,11 +351,24 @@ print_status "This can take 1-3 minutes. Monitoring acme-companion logs..."
 echo ""
 
 sleep 5
-
-# Tail logs briefly to show progress
 timeout 30 docker logs -f nginx-proxy-acme 2>&1 | grep -i "$SUBDOMAIN" || {
-    print_status "Certificate request in progress (check logs if needed)"
-}
+
+# If production desired, ensure domain is reachable before switching from staging
+if [[ "$PRODUCTION_MODE" -eq 1 ]]; then
+    # Wait for DNS/HTTP reachability and switch from staging if necessary
+    if wait_for_dns_and_switch_to_production "$SUBDOMAIN"; then
+        print_status "Richiesta certificato in produzione inviata"
+    else
+        print_warning "Dominio non raggiungibile. Ho lasciato ACME in modalità staging. Controlla DNS o esegui manualmente il rinnovo in seguito."
+    fi
+else
+    print_status "ACME in modalità staging: richiesta certificato di test inviata"
+fi
+
+# Tail logs briefly to show progress for the specific domain (best-effort)
+if command -v timeout &> /dev/null; then
+    timeout 30 docker logs -f nginx-proxy-acme 2>&1 | grep -i "$SUBDOMAIN" || true
+fi
 
 echo ""
 print_header "Setup Complete!"
