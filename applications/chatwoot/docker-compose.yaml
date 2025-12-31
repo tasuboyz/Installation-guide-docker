@@ -1,9 +1,13 @@
 version: '3'
 
+# NOTA: Questo file viene SOVRASCRITTO dallo script install.sh
+# quando si esegue l'installazione guidata. Usalo come riferimento
+# o per modifiche manuali.
+
 services:
   base: &base
     image: chatwoot/chatwoot:latest
-    env_file: .env ## Change this file for customized env variables
+    env_file: .env
     volumes:
       - storage_data:/app/storage
 
@@ -12,29 +16,26 @@ services:
     depends_on:
       - postgres
       - redis
-    # Bind rails to all host interfaces so the app is reachable from LAN.
-    # Using '3000:3000' binds to 0.0.0.0 on the host. For local-only access
-    # keep the previous '127.0.0.1:3000:3000' mapping.
-    # Comment out 'ports' when using nginx-proxy (expose instead)
-    ports:
-      - '3000:3000'
+    # Se usi nginx-proxy: commenta 'ports' e usa solo 'expose'
+    # ports:
+    #   - '3000:3000'
     expose:
       - "3000"
     environment:
       - NODE_ENV=production
       - RAILS_ENV=production
       - INSTALLATION_ENV=docker
-      # Uncomment and configure these for nginx-proxy + SSL:
-      # - VIRTUAL_HOST=chatwoot.example.com
-      # - VIRTUAL_PORT=3000
-      # - LETSENCRYPT_HOST=chatwoot.example.com
-      # - LETSENCRYPT_EMAIL=admin@example.com
+      # Queste variabili vengono lette da .env se configurate:
+      - VIRTUAL_HOST=${VIRTUAL_HOST:-}
+      - VIRTUAL_PORT=3000
+      - LETSENCRYPT_HOST=${LETSENCRYPT_HOST:-}
+      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL:-}
     entrypoint: docker/entrypoints/rails.sh
     command: ['bundle', 'exec', 'rails', 's', '-p', '3000', '-b', '0.0.0.0']
     networks:
       - default
-      # Uncomment to use nginx-proxy:
-      # - glpi-net
+      # Decommentare per nginx-proxy (o usare install.sh che lo fa automaticamente):
+      # - n8n-net
     restart: always
 
   sidekiq:
@@ -54,10 +55,9 @@ services:
     restart: always
     env_file:
       - .env
-    # Expose Postgres on the host for LAN access if needed. Keep this
-    # restricted or use firewall rules in production.
-    ports:
-      - '5432:5432'
+    # Commenta le porte per non esporle pubblicamente in produzione
+    # ports:
+    #   - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -68,10 +68,9 @@ services:
     env_file: .env
     volumes:
       - redis_data:/data
-    # Expose Redis on the host for LAN access if needed. Keep this
-    # restricted or use firewall rules in production.
-    ports:
-      - '6379:6379'
+    # Commenta le porte per non esporle pubblicamente in produzione
+    # ports:
+    #   - '6379:6379'
 
 volumes:
   storage_data:
@@ -81,6 +80,6 @@ volumes:
 networks:
   default:
     driver: bridge
-  # Uncomment to connect to nginx-proxy:
-  # glpi-net:
+  # Decommentare per nginx-proxy (lo script install.sh lo fa automaticamente):
+  # n8n-net:
   #   external: true

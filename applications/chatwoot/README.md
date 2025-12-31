@@ -2,13 +2,42 @@
 
 Questo repository fornisce un setup unificato per installare Chatwoot, una piattaforma self-hosted per il supporto clienti, utilizzando Docker con Redis e PostgreSQL come container.
 
+## Quick Start
+
+```bash
+chmod +x install.sh
+sudo ./install.sh
+```
+
+**Lo script fa tutto automaticamente:**
+1. Configura rete Docker
+2. Chiede il dominio (opzionale, per SSL automatico)
+3. Chiede email Let's Encrypt (se dominio specificato)
+4. Genera credenziali sicure (SECRET_KEY_BASE, password DB/Redis)
+5. Crea `.env` e `docker-compose.yaml` configurati
+6. Prepara il database e avvia i servizi
+
+**NESSUN INTERVENTO MANUALE RICHIESTO** — niente modifiche a docker-compose, niente comandi extra.
+
+## Modalità di Installazione
+
+### Modalità Locale (default)
+- Premi INVIO quando lo script chiede il dominio
+- Chatwoot sarà accessibile su `http://<IP_SERVER>:3000`
+- Nessun SSL (ideale per test o LAN)
+
+### Modalità Dominio + SSL
+- Inserisci il dominio quando richiesto (es. `chatwoot.example.com`)
+- Inserisci l'email per Let's Encrypt
+- Lo script configura automaticamente le variabili per `nginx-proxy` + `acme-companion`
+- Il certificato SSL viene emesso automaticamente
+
 ## Struttura del Setup
 
-- `install.sh`: Script di installazione automatizzata
-- `.env`: File di configurazione ambiente (personalizza con i tuoi valori)
+- `install.sh`: Script di installazione guidata
+- `.env`: File di configurazione ambiente (generato dallo script)
 - `.env.example`: Template completo delle variabili ambiente
-- `docker-compose.yaml`: Configurazione Docker Compose per tutti i servizi
-- `.github/copilot-instructions.md`: Guida per agenti AI
+- `docker-compose.yaml`: Configurazione Docker Compose (generato/aggiornato dallo script)
 
 ## Servizi Containerizzati
 
@@ -19,61 +48,31 @@ Il setup include tutti i servizi come container Docker:
 - **PostgreSQL**: Database (con pgvector per funzionalità AI)
 - **Redis**: Cache e message broker
 
-## Installazione Rapida
+## Requisiti
 
-1. **Trasferisci i file** su un server Linux con Docker installato
-2. **Personalizza `.env`**:
-   - Imposta `FRONTEND_URL` con il tuo dominio
-   - Genera una `SECRET_KEY_BASE` sicura (usa `openssl rand -hex 64`)
-   - Configura email SMTP se necessario
-   - Imposta password sicure per Redis e PostgreSQL
-3. **Rendi eseguibile lo script**: `chmod +x install.sh`
-4. **Esegui l'installazione**: `sudo ./install.sh`
+- Docker e Docker Compose installati
+- Porta 3000 libera (modalità locale) oppure 80/443 (modalità proxy)
+- DNS configurato e puntato al server (se usi dominio)
+- `nginx-proxy` + `nginx-proxy-acme` in esecuzione (se usi dominio)
 
-## Accesso in LAN
+## Dopo l'Installazione
 
-Questa configurazione può esporre Chatwoot sulla rete locale (LAN). Per abilitare l'accesso in LAN:
-
-- Nel file `docker-compose.yaml` i servizi ora sono mappati su tutte le interfacce host (es. `3000:3000`).
-- Nel file ` .env` imposta `FRONTEND_URL` sull'indirizzo IP del server nella LAN, ad esempio:
-
-```text
-FRONTEND_URL=http://192.168.1.42:3000
-```
-
-- Avvia i servizi:
-
+### Verifica servizi
 ```bash
-docker compose up -d
+docker compose ps
+docker compose logs -f rails
 ```
 
-- Accedi da un altro host nella stessa LAN visitando `http://192.168.1.42:3000`.
+### Verifica SSL (se hai configurato un dominio)
+```bash
+docker logs -f nginx-proxy-acme | grep chatwoot
+curl -I https://chatwoot.tuodominio.com
+```
 
-Avvertenze di sicurezza:
-
-- Esponendo i servizi sulla LAN, assicurati di limitare l'accesso tramite firewall o regole di rete.
-- Non esporre Postgres/Redis in una rete non affidabile senza ulteriori protezioni (VPN, firewall, autenticazione).
-- Per un accesso pubblico, usa Nginx come reverse proxy e abilita HTTPS con Let's Encrypt.
-
-## Configurazione Dettagliata
-
-### Dominio e SSL
-- Imposta `FRONTEND_URL=https://tuodominio.com`
-- Dopo l'installazione, configura Nginx come reverse proxy
-- Aggiungi SSL con Let's Encrypt
-
-### Database e Cache
-- PostgreSQL e Redis sono già configurati come container
-- Le password sono generate automaticamente dallo script
-- I dati persistono nei volumi Docker
-
-### Email
-- Per produzione, configura SMTP (SendGrid, SES, etc.)
-- Oppure usa Postfix sul server
-
-### Storage
-- Default: storage locale (non raccomandato per produzione)
-- Produzione: configura S3, Azure Blob, o GCS
+### Accesso Rails console
+```bash
+docker exec -it $(basename $(pwd))-rails-1 sh -c 'RAILS_ENV=production bundle exec rails c'
+```
 
 ## Comandi Utili
 
@@ -89,11 +88,31 @@ docker compose pull
 docker compose run --rm rails bundle exec rails db:chatwoot_prepare
 docker compose up -d
 
-# Accesso Rails console
-docker exec -it $(basename $(pwd))-rails-1 sh -c 'RAILS_ENV=production bundle exec rails c'
-
 # Logs
 docker compose logs -f rails
+```
+
+## Troubleshooting
+
+### Certificato non emesso
+```bash
+# Verifica che nginx-proxy e acme-companion siano attivi
+docker ps | grep nginx-proxy
+
+# Verifica che Chatwoot sia nella stessa rete del proxy
+docker network inspect n8n-net
+
+# Controlla i log di acme-companion
+docker logs nginx-proxy-acme
+```
+
+### Servizio non raggiungibile
+```bash
+# Verifica stato servizi
+docker compose ps
+
+# Controlla logs errori
+docker compose logs rails
 ```
 
 ## Sicurezza
