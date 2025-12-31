@@ -145,7 +145,7 @@ SECRET_KEY_BASE=${SECRET_KEY_BASE}
 RAILS_ENV=production
 
 # === Database ===
-POSTGRES_HOST=chatwoot_postgres
+POSTGRES_HOST=chatwoot-postgres-1
 POSTGRES_DB=chatwoot
 # Compatibility: some entrypoints/readers expect POSTGRES_USERNAME or PGUSER
 POSTGRES_USER=postgres
@@ -285,6 +285,7 @@ cat >> docker-compose.yaml << 'COMPOSE_EOF'
 
   redis:
     image: redis:alpine
+    container_name: chatwoot-redis-1
     restart: always
     command: ["sh", "-c", "redis-server --requirepass \"$REDIS_PASSWORD\""]
     env_file: .env
