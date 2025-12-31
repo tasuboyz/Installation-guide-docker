@@ -145,9 +145,12 @@ SECRET_KEY_BASE=${SECRET_KEY_BASE}
 RAILS_ENV=production
 
 # === Database ===
-POSTGRES_HOST=postgres
+POSTGRES_HOST=chatwoot_postgres
 POSTGRES_DB=chatwoot
+# Compatibility: some entrypoints/readers expect POSTGRES_USERNAME or PGUSER
 POSTGRES_USER=postgres
+POSTGRES_USERNAME=postgres
+PGUSER=postgres
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
 
 # === Redis ===
