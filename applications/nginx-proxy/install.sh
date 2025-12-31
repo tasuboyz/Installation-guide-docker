@@ -403,28 +403,82 @@ ENV_ARGS="${ENV_ARGS} -e VIRTUAL_PORT=${INTERNAL_PORT}"
 ENV_ARGS="${ENV_ARGS} -e LETSENCRYPT_HOST=${SUBDOMAIN}"
 ENV_ARGS="${ENV_ARGS} -e LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}"
 
-# Ricrea container
-echo "  → Ricreazione container con configurazione SSL..."
-docker stop "$CONTAINER_NAME" >/dev/null 2>&1
-docker rm "$CONTAINER_NAME" >/dev/null 2>&1
+# Ricreazione NON distruttiva: crea un nuovo container temporaneo, verifica, poi swap dei nomi
+echo "  → Creazione nuovo container temporaneo per applicare la configurazione SSL (swap non distruttivo)..."
+TMP_NAME="${CONTAINER_NAME}.__new__.$RANDOM"
 
-# Costruisci comando run
-RUN_CMD="docker run -d --name ${CONTAINER_NAME} --network ${DOCKER_NETWORK} --restart unless-stopped ${MOUNT_ARGS} ${ENV_ARGS}"
+# Costruisci comando run per container temporaneo
+RUN_CMD="docker run -d --name ${TMP_NAME} --network ${DOCKER_NETWORK} --restart unless-stopped ${MOUNT_ARGS} ${ENV_ARGS}"
 [[ -n "$CURRENT_ENTRYPOINT" ]] && RUN_CMD="${RUN_CMD} --entrypoint ${CURRENT_ENTRYPOINT}"
 RUN_CMD="${RUN_CMD} ${CURRENT_IMAGE}"
 [[ -n "$CURRENT_CMD" ]] && RUN_CMD="${RUN_CMD} ${CURRENT_CMD}"
 
-# Esegui
-eval "$RUN_CMD" >/dev/null 2>&1
-
-if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-    print_status "Container riconfigurato con SSL"
-else
-    print_error "Errore ricreazione container"
+# Esegui il container temporaneo
+set +e
+NEW_ID=$(eval "$RUN_CMD" 2>/dev/null)
+RC=$?
+set -e
+if [[ $RC -ne 0 ]] || [[ -z "$NEW_ID" ]]; then
+    print_error "Errore creazione del container temporaneo"
+    # pulizia se necessario
+    docker rm -f "$TMP_NAME" >/dev/null 2>&1 || true
     exit 1
 fi
 
-sleep 3
+print_status "Container temporaneo creato: ${TMP_NAME}"
+
+# Attendi che il nuovo container sia in stato 'running'
+echo "  → Attendo che il nuovo container sia in esecuzione..."
+for i in {1..20}; do
+    if docker ps --format '{{.Names}}' | grep -q "^${TMP_NAME}$"; then
+        break
+    fi
+    sleep 1
+done
+
+if ! docker ps --format '{{.Names}}' | grep -q "^${TMP_NAME}$"; then
+    print_error "Il container temporaneo non è partito correttamente"
+    docker logs "$TMP_NAME" || true
+    docker rm -f "$TMP_NAME" >/dev/null 2>&1 || true
+    exit 1
+fi
+
+print_status "Container temporaneo in esecuzione"
+
+# Ora esegui lo swap: ferma il container originale, rinominalo come backup, rinomina il nuovo col nome originale
+BACKUP_NAME="${CONTAINER_NAME}.__old__.$(date +%s)"
+echo "  → Arresto del container originale: ${CONTAINER_NAME}"
+docker stop "$CONTAINER_NAME" >/dev/null 2>&1 || true
+
+echo "  → Rinomina del container originale in backup: ${BACKUP_NAME}"
+docker rename "$CONTAINER_NAME" "$BACKUP_NAME" >/dev/null 2>&1 || true
+
+echo "  → Assegno il nome originale al nuovo container"
+docker rename "$TMP_NAME" "$CONTAINER_NAME"
+
+# Verifica che il nuovo container con il nome originale sia attivo
+if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+    print_status "Swap completato: ${CONTAINER_NAME} ora punta al nuovo container"
+else
+    print_error "Errore nello swap dei container. Ripristino il backup se possibile"
+    # Tentativo di rollback
+    docker rename "$BACKUP_NAME" "$CONTAINER_NAME" >/dev/null 2>&1 || true
+    docker rm -f "$TMP_NAME" >/dev/null 2>&1 || true
+    exit 1
+fi
+
+sleep 2
+
+# Offri la rimozione del backup (non rimuovere automaticamente)
+echo ""
+read -p "Vuoi rimuovere il container di backup ${BACKUP_NAME}? [y/N]: " REMOVE_BACKUP
+REMOVE_BACKUP=${REMOVE_BACKUP:-n}
+if [[ "${REMOVE_BACKUP,,}" == "y" ]]; then
+    docker rm -f "$BACKUP_NAME" >/dev/null 2>&1 || true
+    print_status "Backup rimosso: ${BACKUP_NAME}"
+else
+    print_warning "Backup mantenuto: ${BACKUP_NAME} (puoi rimuoverlo manualmente quando sei sicuro)"
+fi
 
 # =============================================================================
 # OUTPUT FINALE
