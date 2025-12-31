@@ -369,115 +369,195 @@ EOF
 
 print_status "Config salvata: ${CONFIG_FILE}"
 
-# Ottieni configurazione corrente del container per preservarla
-echo "  → Backup configurazione container..."
-CURRENT_IMAGE=$(docker inspect "$CONTAINER_NAME" --format='{{.Config.Image}}')
-CURRENT_CMD=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Cmd}}{{.}} {{end}}')
-CURRENT_ENTRYPOINT=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Entrypoint}}{{.}} {{end}}')
+# Controlla se il container ha già le env proxy corrette
+echo "  → Verifica configurazione attuale..."
+CURRENT_VHOST=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Env}}{{if eq . (printf "VIRTUAL_HOST=%s" "'$SUBDOMAIN'")}}{{.}}{{end}}{{end}}' 2>/dev/null || echo "")
+CURRENT_LETSENCRYPT=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Env}}{{if eq . (printf "LETSENCRYPT_HOST=%s" "'$SUBDOMAIN'")}}{{.}}{{end}}{{end}}' 2>/dev/null || echo "")
 
-# Volumi (bind mounts e named volumes)
-MOUNT_ARGS=""
-while IFS= read -r mount; do
-    TYPE=$(echo "$mount" | jq -r '.Type')
-    SRC=$(echo "$mount" | jq -r '.Source')
-    DST=$(echo "$mount" | jq -r '.Destination')
-    if [[ "$TYPE" == "bind" ]]; then
-        MOUNT_ARGS="${MOUNT_ARGS} -v ${SRC}:${DST}"
-    elif [[ "$TYPE" == "volume" ]]; then
-        MOUNT_ARGS="${MOUNT_ARGS} -v ${SRC}:${DST}"
-    fi
-done < <(docker inspect "$CONTAINER_NAME" --format='{{json .Mounts}}' | jq -c '.[]')
-
-# Environment variables (preserva esistenti + aggiungi proxy vars)
-ENV_ARGS=""
-while IFS= read -r env; do
-    # Skip env già presenti che sovrascriveremo
-    if [[ ! "$env" =~ ^VIRTUAL_HOST= ]] && [[ ! "$env" =~ ^VIRTUAL_PORT= ]] && [[ ! "$env" =~ ^LETSENCRYPT_HOST= ]] && [[ ! "$env" =~ ^LETSENCRYPT_EMAIL= ]]; then
-        ENV_ARGS="${ENV_ARGS} -e ${env}"
-    fi
-done < <(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Env}}{{println .}}{{end}}')
-
-# Aggiungi variabili per acme-companion
-ENV_ARGS="${ENV_ARGS} -e VIRTUAL_HOST=${SUBDOMAIN}"
-ENV_ARGS="${ENV_ARGS} -e VIRTUAL_PORT=${INTERNAL_PORT}"
-ENV_ARGS="${ENV_ARGS} -e LETSENCRYPT_HOST=${SUBDOMAIN}"
-ENV_ARGS="${ENV_ARGS} -e LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}"
-
-# Ricreazione NON distruttiva: crea un nuovo container temporaneo, verifica, poi swap dei nomi
-echo "  → Creazione nuovo container temporaneo per applicare la configurazione SSL (swap non distruttivo)..."
-TMP_NAME="${CONTAINER_NAME}.__new__.$RANDOM"
-
-# Costruisci comando run per container temporaneo
-RUN_CMD="docker run -d --name ${TMP_NAME} --network ${DOCKER_NETWORK} --restart unless-stopped ${MOUNT_ARGS} ${ENV_ARGS}"
-[[ -n "$CURRENT_ENTRYPOINT" ]] && RUN_CMD="${RUN_CMD} --entrypoint ${CURRENT_ENTRYPOINT}"
-RUN_CMD="${RUN_CMD} ${CURRENT_IMAGE}"
-[[ -n "$CURRENT_CMD" ]] && RUN_CMD="${RUN_CMD} ${CURRENT_CMD}"
-
-# Esegui il container temporaneo
-set +e
-NEW_ID=$(eval "$RUN_CMD" 2>/dev/null)
-RC=$?
-set -e
-if [[ $RC -ne 0 ]] || [[ -z "$NEW_ID" ]]; then
-    print_error "Errore creazione del container temporaneo"
-    # pulizia se necessario
-    docker rm -f "$TMP_NAME" >/dev/null 2>&1 || true
-    exit 1
-fi
-
-print_status "Container temporaneo creato: ${TMP_NAME}"
-
-# Attendi che il nuovo container sia in stato 'running'
-echo "  → Attendo che il nuovo container sia in esecuzione..."
-for i in {1..20}; do
-    if docker ps --format '{{.Names}}' | grep -q "^${TMP_NAME}$"; then
-        break
-    fi
-    sleep 1
-done
-
-if ! docker ps --format '{{.Names}}' | grep -q "^${TMP_NAME}$"; then
-    print_error "Il container temporaneo non è partito correttamente"
-    docker logs "$TMP_NAME" || true
-    docker rm -f "$TMP_NAME" >/dev/null 2>&1 || true
-    exit 1
-fi
-
-print_status "Container temporaneo in esecuzione"
-
-# Ora esegui lo swap: ferma il container originale, rinominalo come backup, rinomina il nuovo col nome originale
-BACKUP_NAME="${CONTAINER_NAME}.__old__.$(date +%s)"
-echo "  → Arresto del container originale: ${CONTAINER_NAME}"
-docker stop "$CONTAINER_NAME" >/dev/null 2>&1 || true
-
-echo "  → Rinomina del container originale in backup: ${BACKUP_NAME}"
-docker rename "$CONTAINER_NAME" "$BACKUP_NAME" >/dev/null 2>&1 || true
-
-echo "  → Assegno il nome originale al nuovo container"
-docker rename "$TMP_NAME" "$CONTAINER_NAME"
-
-# Verifica che il nuovo container con il nome originale sia attivo
-if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-    print_status "Swap completato: ${CONTAINER_NAME} ora punta al nuovo container"
+# Se già configurato correttamente, evita ricreazione
+if [[ -n "$CURRENT_VHOST" ]] && [[ -n "$CURRENT_LETSENCRYPT" ]]; then
+    print_status "Container già configurato per SSL: $SUBDOMAIN"
+    echo "  → Configurazione esistente rilevata - saltando ricreazione"
+    SKIP_RECREATION=true
 else
-    print_error "Errore nello swap dei container. Ripristino il backup se possibile"
-    # Tentativo di rollback
-    docker rename "$BACKUP_NAME" "$CONTAINER_NAME" >/dev/null 2>&1 || true
-    docker rm -f "$TMP_NAME" >/dev/null 2>&1 || true
-    exit 1
+    SKIP_RECREATION=false
+    echo "  → Backup configurazione container..."
+    CURRENT_IMAGE=$(docker inspect "$CONTAINER_NAME" --format='{{.Config.Image}}')
+    CURRENT_CMD=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Cmd}}{{.}} {{end}}')
+    CURRENT_ENTRYPOINT=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Entrypoint}}{{.}} {{end}}')
 fi
 
-sleep 2
+# Rilevamento servizi speciali che richiedono configurazione custom
+IS_SPECIAL_SERVICE=false
+SPECIAL_CONFIG=""
 
-# Offri la rimozione del backup (non rimuovere automaticamente)
-echo ""
-read -p "Vuoi rimuovere il container di backup ${BACKUP_NAME}? [y/N]: " REMOVE_BACKUP
-REMOVE_BACKUP=${REMOVE_BACKUP:-n}
-if [[ "${REMOVE_BACKUP,,}" == "y" ]]; then
-    docker rm -f "$BACKUP_NAME" >/dev/null 2>&1 || true
-    print_status "Backup rimosso: ${BACKUP_NAME}"
-else
-    print_warning "Backup mantenuto: ${BACKUP_NAME} (puoi rimuoverlo manualmente quando sei sicuro)"
+# Portainer (HTTPS backend interno)
+if [[ "$CURRENT_IMAGE" =~ portainer ]] && [[ "$INTERNAL_PORT" == "9443" ]]; then
+    IS_SPECIAL_SERVICE=true
+    SPECIAL_CONFIG="portainer-https"
+    print_warning "Rilevato Portainer con HTTPS interno - configurazione speciale necessaria"
+fi
+
+if [[ "$SKIP_RECREATION" == "false" ]]; then
+    # Volumi (bind mounts e named volumes)
+    MOUNT_ARGS=""
+    while IFS= read -r mount; do
+        TYPE=$(echo "$mount" | jq -r '.Type' 2>/dev/null || echo "unknown")
+        SRC=$(echo "$mount" | jq -r '.Source' 2>/dev/null || echo "")
+        DST=$(echo "$mount" | jq -r '.Destination' 2>/dev/null || echo "")
+        if [[ "$TYPE" == "bind" ]] && [[ -n "$SRC" ]] && [[ -n "$DST" ]]; then
+            MOUNT_ARGS="${MOUNT_ARGS} -v ${SRC}:${DST}"
+        elif [[ "$TYPE" == "volume" ]] && [[ -n "$SRC" ]] && [[ -n "$DST" ]]; then
+            MOUNT_ARGS="${MOUNT_ARGS} -v ${SRC}:${DST}"
+        fi
+    done < <(docker inspect "$CONTAINER_NAME" --format='{{json .Mounts}}' 2>/dev/null | jq -c '.[]' 2>/dev/null || echo '{}')
+
+    # Environment variables (preserva esistenti + aggiungi proxy vars)
+    ENV_ARGS=""
+    while IFS= read -r env; do
+        # Skip env già presenti che sovrascriveremo
+        if [[ ! "$env" =~ ^VIRTUAL_HOST= ]] && [[ ! "$env" =~ ^VIRTUAL_PORT= ]] && [[ ! "$env" =~ ^LETSENCRYPT_HOST= ]] && [[ ! "$env" =~ ^LETSENCRYPT_EMAIL= ]]; then
+            ENV_ARGS="${ENV_ARGS} -e ${env}"
+        fi
+    done < <(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Env}}{{println .}}{{end}}')
+
+    # Aggiungi variabili per acme-companion
+    ENV_ARGS="${ENV_ARGS} -e VIRTUAL_HOST=${SUBDOMAIN}"
+    ENV_ARGS="${ENV_ARGS} -e VIRTUAL_PORT=${INTERNAL_PORT}"
+    ENV_ARGS="${ENV_ARGS} -e LETSENCRYPT_HOST=${SUBDOMAIN}"
+    ENV_ARGS="${ENV_ARGS} -e LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}"
+fi
+
+if [[ "$SKIP_RECREATION" == "false" ]]; then
+    # Ricreazione NON distruttiva: crea un nuovo container temporaneo, verifica, poi swap dei nomi
+    echo "  → Creazione nuovo container temporaneo per applicare la configurazione SSL (swap non distruttivo)..."
+    TMP_NAME="${CONTAINER_NAME}.__new__.$RANDOM"
+
+    # Costruisci comando run per container temporaneo
+    RUN_CMD="docker run -d --name ${TMP_NAME} --network ${DOCKER_NETWORK} --restart unless-stopped ${MOUNT_ARGS} ${ENV_ARGS}"
+    [[ -n "$CURRENT_ENTRYPOINT" ]] && RUN_CMD="${RUN_CMD} --entrypoint ${CURRENT_ENTRYPOINT}"
+    RUN_CMD="${RUN_CMD} ${CURRENT_IMAGE}"
+    [[ -n "$CURRENT_CMD" ]] && RUN_CMD="${RUN_CMD} ${CURRENT_CMD}"
+
+    # Esegui il container temporaneo
+    set +e
+    NEW_ID=$(eval "$RUN_CMD" 2>/dev/null)
+    RC=$?
+    set -e
+    if [[ $RC -ne 0 ]] || [[ -z "$NEW_ID" ]]; then
+        print_error "Errore creazione del container temporaneo"
+        print_warning "Potrebbe essere un servizio speciale che richiede configurazione manuale"
+        # pulizia se necessario
+        docker rm -f "$TMP_NAME" >/dev/null 2>&1 || true
+        
+        # Per servizi speciali, non fallire ma procedi con configurazione vhost
+        if [[ "$IS_SPECIAL_SERVICE" == "true" ]]; then
+            print_warning "Servizio speciale rilevato: applico solo configurazione nginx"
+            SKIP_RECREATION=true
+        else
+            exit 1
+        fi
+    else
+        print_status "Container temporaneo creato: ${TMP_NAME}"
+
+        # Attendi che il nuovo container sia in stato 'running'
+        echo "  → Attendo che il nuovo container sia in esecuzione..."
+        for i in {1..20}; do
+            if docker ps --format '{{.Names}}' | grep -q "^${TMP_NAME}$"; then
+                break
+            fi
+            sleep 1
+        done
+
+        if ! docker ps --format '{{.Names}}' | grep -q "^${TMP_NAME}$"; then
+            print_error "Il container temporaneo non è partito correttamente"
+            docker logs "$TMP_NAME" || true
+            docker rm -f "$TMP_NAME" >/dev/null 2>&1 || true
+            
+            if [[ "$IS_SPECIAL_SERVICE" == "true" ]]; then
+                print_warning "Fallback per servizio speciale: applico solo configurazione nginx"
+                SKIP_RECREATION=true
+            else
+                exit 1
+            fi
+        else
+            print_status "Container temporaneo in esecuzione"
+
+            # Ora esegui lo swap: ferma il container originale, rinominalo come backup, rinomina il nuovo col nome originale
+            BACKUP_NAME="${CONTAINER_NAME}.__old__.$(date +%s)"
+            echo "  → Arresto del container originale: ${CONTAINER_NAME}"
+            docker stop "$CONTAINER_NAME" >/dev/null 2>&1 || true
+
+            echo "  → Rinomina del container originale in backup: ${BACKUP_NAME}"
+            docker rename "$CONTAINER_NAME" "$BACKUP_NAME" >/dev/null 2>&1 || true
+
+            echo "  → Assegno il nome originale al nuovo container"
+            docker rename "$TMP_NAME" "$CONTAINER_NAME"
+
+            # Verifica che il nuovo container con il nome originale sia attivo
+            if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+                print_status "Swap completato: ${CONTAINER_NAME} ora punta al nuovo container"
+            else
+                print_error "Errore nello swap dei container. Ripristino il backup se possibile"
+                # Tentativo di rollback
+                docker rename "$BACKUP_NAME" "$CONTAINER_NAME" >/dev/null 2>&1 || true
+                docker rm -f "$TMP_NAME" >/dev/null 2>&1 || true
+                exit 1
+            fi
+
+            sleep 2
+
+            # Offri la rimozione del backup (non rimuovere automaticamente)
+            echo ""
+            read -p "Vuoi rimuovere il container di backup ${BACKUP_NAME}? [y/N]: " REMOVE_BACKUP
+            REMOVE_BACKUP=${REMOVE_BACKUP:-n}
+            if [[ "${REMOVE_BACKUP,,}" == "y" ]]; then
+                docker rm -f "$BACKUP_NAME" >/dev/null 2>&1 || true
+                print_status "Backup rimosso: ${BACKUP_NAME}"
+            else
+                print_warning "Backup mantenuto: ${BACKUP_NAME} (puoi rimuoverlo manualmente quando sei sicuro)"
+            fi
+        fi
+    fi
+fi
+
+# Crea configurazione vhost.d per servizi speciali o customizzazioni
+if [[ "$IS_SPECIAL_SERVICE" == "true" ]] || [[ "$SKIP_RECREATION" == "true" ]]; then
+    echo "  → Generazione configurazione nginx personalizzata..."
+    
+    # Backup configurazione esistente se presente
+    if docker exec nginx-proxy test -f "/etc/nginx/vhost.d/${SUBDOMAIN}" 2>/dev/null; then
+        docker exec nginx-proxy cp "/etc/nginx/vhost.d/${SUBDOMAIN}" "/tmp/${SUBDOMAIN}.backup.$(date +%s)" 2>/dev/null || true
+        print_warning "Backup configurazione esistente creato"
+    fi
+    
+    # Crea configurazione specifica
+    VHOST_CONFIG=""
+    if [[ "$SPECIAL_CONFIG" == "portainer-https" ]]; then
+        VHOST_CONFIG="# Portainer HTTPS backend configuration\n"
+        VHOST_CONFIG+="proxy_pass https://${CONTAINER_NAME}:${INTERNAL_PORT};\n"
+        VHOST_CONFIG+="proxy_ssl_verify off;\n"
+        VHOST_CONFIG+="proxy_ssl_session_reuse off;\n"
+    else
+        # Configurazione standard per altri servizi
+        VHOST_CONFIG="# Custom configuration for ${SUBDOMAIN}\n"
+        VHOST_CONFIG+="proxy_set_header Host \$host;\n"
+        VHOST_CONFIG+="proxy_set_header X-Real-IP \$remote_addr;\n"
+    fi
+    
+    # Scrivi configurazione
+    echo -e "$VHOST_CONFIG" > "vhost-configs/${SUBDOMAIN}"
+    docker cp "vhost-configs/${SUBDOMAIN}" nginx-proxy:"/etc/nginx/vhost.d/${SUBDOMAIN}"
+    
+    # Test e reload nginx
+    if docker exec nginx-proxy nginx -t 2>&1 | grep -q "successful"; then
+        docker exec nginx-proxy nginx -s reload
+        print_status "Configurazione nginx personalizzata applicata"
+    else
+        print_error "Errore nella configurazione nginx - ripristino backup"
+        docker exec nginx-proxy rm -f "/etc/nginx/vhost.d/${SUBDOMAIN}" 2>/dev/null || true
+        exit 1
+    fi
 fi
 
 # =============================================================================
