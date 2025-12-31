@@ -35,6 +35,7 @@ services:
     environment:
       - DEFAULT_EMAIL=${LETSENCRYPT_EMAIL}
       - NGINX_PROXY_CONTAINER=nginx-proxy
+      - ACME_CA_URI=${ACME_CA_URI:-}
     depends_on:
       - nginx-proxy
     networks:

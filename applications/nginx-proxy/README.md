@@ -9,51 +9,121 @@ Nginx reverse proxy automatico con gestione certificati SSL Let's Encrypt per tu
 - **WebSocket support**: Configurato per Chatwoot e n8n
 - **Alta capacità**: Timeout e buffer ottimizzati per workflow lunghi e upload di file
 - **Logging**: Log rotati automaticamente per evitare consumo eccessivo di spazio
+- **Setup automatizzato**: Script CLI per configurazione sottodomini con scan porte e DNS check
 
 ## Prerequisiti
 
 - Docker e Docker Compose installati
-- Rete Docker `glpi-net` esistente (creata automaticamente se mancante)
+- Rete Docker `glpi-net` (creata automaticamente dallo script se mancante)
 - DNS configurato per puntare ai sottodomini desiderati
 - Porte 80 e 443 aperte nel firewall
 
-## Installazione
+## Quick Start
 
-1. **Copia il file di configurazione**:
-   ```bash
-   cp .env.example .env
-   nano .env
-   ```
+### 1. Installazione nginx-proxy
 
-2. **Configura l'email per Let's Encrypt**:
-   ```bash
-   LETSENCRYPT_EMAIL=admin@tuodominio.com
-   ```
+**Modalità interattiva:**
+```bash
+sudo ./install.sh
+```
 
-3. **Avvia nginx-proxy**:
-   ```bash
-   sudo ./install.sh
-   ```
+**Modalità automatica (non-interactive):**
+```bash
+sudo ./install.sh --subdomain proxy.example.com --email admin@example.com --network glpi-net --yes
+```
 
-## Configurazione Servizi
+### 1. Installazione nginx-proxy
 
-### Metodo 1: Script Automatico
+**Modalità interattiva:**
+```bash
+sudo ./install.sh
+```
+Ti chiederà solo: email e modalità (staging/produzione).
 
-Usa lo script di configurazione per aggiungere facilmente un servizio:
+**Modalità automatica:**
+```bash
+sudo ./install.sh --email admin@example.com --yes
+```
 
+**Modalità staging (per test senza rate limit):**
+```bash
+sudo ./install.sh --email admin@example.com --staging --yes
+```
+
+### 2. Configurare un servizio
+
+**Modalità interattiva (consigliata):**
 ```bash
 sudo ./setup-subdomain.sh
 ```
 
-Lo script ti guiderà attraverso:
-- Selezione del container
-- Configurazione del sottodominio
-- Verifica DNS
-- Generazione configurazione docker-compose
+Lo script:
+1. Lista tutti i container attivi
+2. Ti fa scegliere il container
+3. Rileva automaticamente le porte esposte
+4. Ti fa selezionare la porta (o auto-seleziona)
+5. Chiede il sottodominio
+6. Verifica DNS
+7. Configura il container
+8. Monitora l'emissione del certificato SSL
 
-### Metodo 2: Configurazione Manuale
+**Modalità automatica:**
+```bash
+sudo ./setup-subdomain.sh --subdomain n8n.example.com --container n8n --port 5678 --yes
+```
 
-Aggiungi queste variabili d'ambiente al tuo servizio nel `docker-compose.yml`:
+**Con selezione porta automatica:**
+```bash
+sudo ./setup-subdomain.sh --subdomain chatwoot.example.com --container chatwoot_rails_1 --yes
+```
+
+### Esempio completo: setup n8n
+
+```bash
+# 1. Installa proxy (una sola volta)
+sudo ./install.sh --email admin@example.com --yes
+
+# 2. Avvia n8n normalmente
+docker run -d \
+  --name n8n \
+  --network glpi-net \
+  -v n8n_data:/home/node/.n8n \
+  n8nio/n8n
+
+# 3. Configura proxy + SSL
+sudo ./setup-subdomain.sh --subdomain n8n.tasuthor.com --container n8n --yes
+
+# 4. Dopo 1-2 minuti: https://n8n.tasuthor.com funziona!
+```
+
+## Opzioni CLI
+
+### install.sh
+```bash
+sudo ./install.sh [--email <email>] [--network <name>] [--staging|--production] [--yes]
+```
+| Opzione | Descrizione |
+|---------|-------------|
+| `--email, -e` | Email per Let's Encrypt (obbligatoria) |
+| `--network, -n` | Rete Docker (default: glpi-net) |
+| `--staging` | Usa certificati test (illimitati) |
+| `--production` | Usa certificati reali (default) |
+| `--yes, -y` | Non interattivo |
+
+### setup-subdomain.sh
+```bash
+sudo ./setup-subdomain.sh [--subdomain <host>] [--container <name>] [--port <port>] [--yes]
+```
+| Opzione | Descrizione |
+|---------|-------------|
+| `--subdomain, -s` | Sottodominio completo (es: n8n.example.com) |
+| `--container, -c` | Nome container Docker |
+| `--port, -p` | Porta interna (auto-rilevata se omessa) |
+| `--yes, -y` | Non interattivo |
+
+## Configurazione Manuale (alternativa)
+
+Se preferisci configurare manualmente senza script, aggiungi queste variabili d'ambiente al `docker-compose.yml` del servizio:
 
 ```yaml
 services:
@@ -115,20 +185,77 @@ docker run -d \
   n8nio/n8n
 ```
 
-### GLPI
+## Opzioni Avanzate
+
+### Configurazione Manuale (senza script)
+
+Se preferisci configurare manualmente, aggiungi queste variabili d'ambiente al `docker-compose.yml` del servizio:
 
 ```yaml
 services:
-  glpi:
+  myservice:
+    image: myimage:latest
     environment:
-      - VIRTUAL_HOST=glpi.example.com
-      - VIRTUAL_PORT=80
-      - LETSENCRYPT_HOST=glpi.example.com
+      - VIRTUAL_HOST=myservice.example.com
+      - VIRTUAL_PORT=8080  # porta interna del servizio
+      - LETSENCRYPT_HOST=myservice.example.com
       - LETSENCRYPT_EMAIL=admin@example.com
     networks:
       - glpi-net
     expose:
-      - "80"
+      - "8080"
+
+networks:
+  glpi-net:
+    external: true
+```
+
+Poi riavvia:
+```bash
+docker compose up -d myservice
+```
+
+### Opzioni CLI
+
+**install.sh:**
+```bash
+sudo ./install.sh [--subdomain <host>] [--email <mail>] [--network <name>] [--staging] [--production] [--yes]
+```
+
+**setup-subdomain.sh:**
+```bash
+sudo ./setup-subdomain.sh [--subdomain <host>] [--container <name>] [--port <port>] [--backend <url>] [--yes]
+```
+
+Esempi:
+```bash
+# Setup automatico n8n con porta auto-rilevata
+sudo ./setup-subdomain.sh -s n8n.example.com -c n8n -y
+
+# Setup con backend personalizzato
+sudo ./setup-subdomain.sh -s api.example.com -b http://192.168.1.100:8080 -y
+
+# Modalità staging per test
+sudo ./install.sh --staging -y
+sudo ./setup-subdomain.sh -s test.example.com -c myapp -y
+```
+
+### Esempi per servizi comuni
+
+#### Chatwoot
+```bash
+# Assumendo che chatwoot sia già in esecuzione
+sudo ./setup-subdomain.sh --subdomain chatwoot.example.com --container chatwoot_rails_1 --port 3000 --yes
+```
+
+#### n8n
+```bash
+sudo ./setup-subdomain.sh --subdomain n8n.example.com --container n8n --port 5678 --yes
+```
+
+#### GLPI
+```bash
+sudo ./setup-subdomain.sh --subdomain glpi.example.com --container glpi --port 80 --yes
 ```
 
 ## Verifica Certificati
@@ -254,6 +381,102 @@ docker compose restart
 
 1. **Firewall**: Blocca porte dirette dei servizi (3000, 5678, etc.), lascia solo 80 e 443
    ```bash
+   # Esempio UFW
+   sudo ufw allow 80/tcp
+   sudo ufw allow 443/tcp
+   sudo ufw deny 3000/tcp  # Chatwoot
+   sudo ufw deny 5678/tcp  # n8n
+   ```
+
+2. **Aggiorna regolarmente le immagini**:
+   ```bash
+   docker compose pull
+   docker compose up -d
+   ```
+
+3. **Monitora i log per accessi sospetti**:
+   ```bash
+   docker logs nginx-proxy | grep -E "40[0-9]|50[0-9]"
+   ```
+
+4. **Rinnovo automatico certificati**: acme-companion rinnova automaticamente 30 giorni prima della scadenza
+
+## Workflow Completo: Setup Produzione
+
+Esempio completo per setup multi-servizio in produzione:
+
+```bash
+# 1. Installa nginx-proxy (produzione)
+cd /opt/nginx-proxy
+sudo ./install.sh --email ops@example.com --network app-net --production --yes
+
+# 2. Avvia servizi (esempio: n8n e Chatwoot)
+# n8n
+docker run -d \
+  --name n8n \
+  --network app-net \
+  -v n8n_data:/home/node/.n8n \
+  n8nio/n8n
+
+# Chatwoot (docker-compose)
+cd /opt/chatwoot
+docker compose up -d
+
+# 3. Configura proxy + SSL per ogni servizio
+cd /opt/nginx-proxy
+
+# n8n
+sudo ./setup-subdomain.sh \
+  --subdomain n8n.example.com \
+  --container n8n \
+  --port 5678 \
+  --yes
+
+# Chatwoot (auto-detect port)
+sudo ./setup-subdomain.sh \
+  --subdomain chat.example.com \
+  --container chatwoot_rails_1 \
+  --yes
+
+# 4. Verifica certificati (dopo 2-3 minuti)
+curl -I https://n8n.example.com
+curl -I https://chat.example.com
+
+# 5. Check logs se necessario
+docker logs -f nginx-proxy-acme
+```
+
+### Test Staging Locale
+
+Per testare il workflow senza consumare rate limit Let's Encrypt:
+
+```bash
+# 1. Setup staging
+sudo ./install.sh --staging --yes
+
+# 2. Setup servizio test
+docker run -d --name nginx-test --network glpi-net nginx:alpine
+
+sudo ./setup-subdomain.sh \
+  --subdomain test.local.example.com \
+  --container nginx-test \
+  --port 80 \
+  --yes
+
+# 3. Verifica (certificato sarà "Fake LE Intermediate X1")
+curl -Ik https://test.local.example.com
+
+# 4. Cleanup e switch a produzione
+sudo ./install.sh --production --yes
+```
+
+## Supporto
+
+Per problemi o domande:
+- Controlla [Troubleshooting](#troubleshooting)
+- Logs: `docker logs nginx-proxy` e `docker logs nginx-proxy-acme`
+- Issue tracker del progetto nginx-proxy: [github.com/nginx-proxy/nginx-proxy](https://github.com/nginx-proxy/nginx-proxy)
+- Issue tracker acme-companion: [github.com/nginx-proxy/acme-companion](https://github.com/nginx-proxy/acme-companion)
    ufw allow 80/tcp
    ufw allow 443/tcp
    ufw enable
