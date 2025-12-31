@@ -277,6 +277,7 @@ cat >> docker-compose.yaml << 'COMPOSE_EOF'
 
   postgres:
     image: pgvector/pgvector:pg16
+    container_name: chatwoot-postgres-1
     restart: always
     env_file:
       - .env
@@ -318,6 +319,19 @@ print_status "docker-compose.yaml generato"
 echo ""
 echo -e "${CYAN}STEP 6/6${NC} - Avvio servizi"
 echo ""
+
+# Pulizia automatica per evitare conflitti (rimuove container e volumi esistenti)
+print_info "Pulizia installazioni precedenti..."
+docker compose down -v 2>/dev/null || true
+
+# Rimuovi eventuali container temporanei
+docker ps -a --filter name=chatwoot --format '{{.Names}}' | while read cname; do
+    if [[ "$cname" =~ chatwoot.*run.* ]]; then
+        docker rm -f "$cname" 2>/dev/null || true
+    fi
+done
+
+print_status "Ambiente pulito, inizio installazione fresca"
 
 print_info "Preparazione database..."
 docker compose run --rm rails bundle exec rails db:chatwoot_prepare
