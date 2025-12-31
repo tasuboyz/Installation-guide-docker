@@ -1,17 +1,19 @@
 #!/bin/bash
 
 # =============================================================================
-# Nginx Reverse Proxy + SSL - SETUP COMPLETO AUTOMATIZZATO
+# NGINX REVERSE PROXY + SSL - SETUP COMPLETO AUTOMATIZZATO
 # =============================================================================
-# Questo script fa TUTTO in un'unica esecuzione:
-# 1. Configura la rete Docker
-# 2. Configura email Let's Encrypt  
+# Questo script fa TUTTO:
+# 1. Configura rete Docker
+# 2. Configura email Let's Encrypt
 # 3. Sceglie modalità SSL (staging/produzione)
-# 4. Avvia nginx-proxy + acme-companion
-# 5. CHIEDE quale container esporre
-# 6. CHIEDE il sottodominio da usare
-# 7. CHIEDE/rileva la porta
-# 8. Genera configurazione per il container
+# 4. Avvia nginx-proxy + acme-companion  
+# 5. Seleziona container da esporre
+# 6. Chiede sottodominio
+# 7. Rileva porta
+# 8. Crea configurazione vhost e la inietta nel proxy (persistente via volume)
+# 9. Configura container con env per acme-companion
+# 10. Servizio raggiungibile via HTTPS automaticamente
 # =============================================================================
 
 set -euo pipefail
@@ -68,7 +70,6 @@ echo ""
 
 print_header "STEP 1/8 - Rete Docker"
 
-# Carica .env esistente
 DOCKER_NETWORK=""
 LETSENCRYPT_EMAIL=""
 ACME_CA_URI=""
@@ -93,7 +94,6 @@ if [[ -z "$DOCKER_NETWORK" ]]; then
     DOCKER_NETWORK=${DOCKER_NETWORK:-glpi-net}
 fi
 
-# Crea se non esiste
 if ! docker network ls --format '{{.Name}}' | grep -q "^${DOCKER_NETWORK}$"; then
     print_warning "Rete '${DOCKER_NETWORK}' non esiste"
     read -p "Crearla? [Y/n]: " CREATE_NET
@@ -160,22 +160,29 @@ fi
 print_header "STEP 4/8 - Avvio Nginx Proxy"
 
 # Genera .env
-echo "# Auto-generated $(date)" > .env
-echo "LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}" >> .env
-echo "DOCKER_NETWORK=${DOCKER_NETWORK}" >> .env
+cat > .env << EOF
+# Auto-generated $(date)
+LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
+DOCKER_NETWORK=${DOCKER_NETWORK}
+EOF
 [[ -n "$ACME_CA_URI" ]] && echo "ACME_CA_URI=${ACME_CA_URI}" >> .env
 
 print_status ".env generato"
+
+# Crea directory per vhost configs (persistente)
+mkdir -p vhost-configs
+chmod 755 vhost-configs
 
 # Stop se running
 if docker ps --format '{{.Names}}' | grep -q "nginx-proxy"; then
     echo "Riavvio proxy..."
     docker compose down 2>/dev/null || true
+    sleep 2
 fi
 
 echo "Avvio container..."
 docker compose up -d
-sleep 3
+sleep 5
 
 if docker ps --format '{{.Names}}' | grep -q "nginx-proxy"; then
     print_status "nginx-proxy attivo"
@@ -259,7 +266,7 @@ print_status "Sottodominio: ${SUBDOMAIN}"
 
 # Check DNS
 if command -v dig &> /dev/null; then
-    DNS=$(dig +short "$SUBDOMAIN" A 2>/dev/null || echo "")
+    DNS=$(dig +short "$SUBDOMAIN" A 2>/dev/null | head -1 || echo "")
     if [[ -n "$DNS" ]]; then
         print_status "DNS: $DNS"
     else
@@ -315,10 +322,10 @@ fi
 print_status "Porta: ${INTERNAL_PORT}"
 
 # =============================================================================
-# STEP 8: RIEPILOGO E APPLICAZIONE
+# STEP 8: APPLICAZIONE AUTOMATICA
 # =============================================================================
 
-print_header "STEP 8/8 - Riepilogo"
+print_header "STEP 8/8 - Applicazione Automatica"
 
 echo ""
 echo "  Container:     ${CONTAINER_NAME}"
@@ -328,7 +335,7 @@ echo "  Email:         ${LETSENCRYPT_EMAIL}"
 echo "  Rete:          ${DOCKER_NETWORK}"
 echo "  Modalità:      $(if [[ -n "$ACME_CA_URI" ]]; then echo 'STAGING (test)'; else echo 'PRODUZIONE'; fi)"
 echo ""
-read -p "Procedo con la configurazione? [Y/n]: " CONFIRM
+read -p "Procedo con la configurazione automatica? [Y/n]: " CONFIRM
 CONFIRM=${CONFIRM:-y}
 
 if [[ "${CONFIRM,,}" != "y" ]]; then
@@ -337,16 +344,17 @@ if [[ "${CONFIRM,,}" != "y" ]]; then
 fi
 
 echo ""
-echo "Applicazione configurazione..."
+echo "Configurazione in corso..."
 
 # Connetti container alla rete se necessario
 CNETS=$(docker inspect "$CONTAINER_NAME" --format='{{range $n,$v := .NetworkSettings.Networks}}{{$n}} {{end}}' 2>/dev/null)
 if [[ ! "$CNETS" =~ $DOCKER_NETWORK ]]; then
-    echo "Connessione a rete ${DOCKER_NETWORK}..."
+    echo "  → Connessione a rete ${DOCKER_NETWORK}..."
     docker network connect "$DOCKER_NETWORK" "$CONTAINER_NAME" 2>/dev/null || true
+    print_status "Container connesso alla rete"
 fi
 
-# Salva configurazione
+# Salva configurazione locale
 CONFIG_FILE="configs/${CONTAINER_NAME}.conf"
 mkdir -p configs
 cat > "$CONFIG_FILE" << EOF
@@ -361,63 +369,93 @@ EOF
 
 print_status "Config salvata: ${CONFIG_FILE}"
 
+# Ottieni configurazione corrente del container per preservarla
+echo "  → Backup configurazione container..."
+CURRENT_IMAGE=$(docker inspect "$CONTAINER_NAME" --format='{{.Config.Image}}')
+CURRENT_CMD=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Cmd}}{{.}} {{end}}')
+CURRENT_ENTRYPOINT=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Entrypoint}}{{.}} {{end}}')
+
+# Volumi (bind mounts e named volumes)
+MOUNT_ARGS=""
+while IFS= read -r mount; do
+    TYPE=$(echo "$mount" | jq -r '.Type')
+    SRC=$(echo "$mount" | jq -r '.Source')
+    DST=$(echo "$mount" | jq -r '.Destination')
+    if [[ "$TYPE" == "bind" ]]; then
+        MOUNT_ARGS="${MOUNT_ARGS} -v ${SRC}:${DST}"
+    elif [[ "$TYPE" == "volume" ]]; then
+        MOUNT_ARGS="${MOUNT_ARGS} -v ${SRC}:${DST}"
+    fi
+done < <(docker inspect "$CONTAINER_NAME" --format='{{json .Mounts}}' | jq -c '.[]')
+
+# Environment variables (preserva esistenti + aggiungi proxy vars)
+ENV_ARGS=""
+while IFS= read -r env; do
+    # Skip env già presenti che sovrascriveremo
+    if [[ ! "$env" =~ ^VIRTUAL_HOST= ]] && [[ ! "$env" =~ ^VIRTUAL_PORT= ]] && [[ ! "$env" =~ ^LETSENCRYPT_HOST= ]] && [[ ! "$env" =~ ^LETSENCRYPT_EMAIL= ]]; then
+        ENV_ARGS="${ENV_ARGS} -e ${env}"
+    fi
+done < <(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Env}}{{println .}}{{end}}')
+
+# Aggiungi variabili per acme-companion
+ENV_ARGS="${ENV_ARGS} -e VIRTUAL_HOST=${SUBDOMAIN}"
+ENV_ARGS="${ENV_ARGS} -e VIRTUAL_PORT=${INTERNAL_PORT}"
+ENV_ARGS="${ENV_ARGS} -e LETSENCRYPT_HOST=${SUBDOMAIN}"
+ENV_ARGS="${ENV_ARGS} -e LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}"
+
+# Ricrea container
+echo "  → Ricreazione container con configurazione SSL..."
+docker stop "$CONTAINER_NAME" >/dev/null 2>&1
+docker rm "$CONTAINER_NAME" >/dev/null 2>&1
+
+# Costruisci comando run
+RUN_CMD="docker run -d --name ${CONTAINER_NAME} --network ${DOCKER_NETWORK} --restart unless-stopped ${MOUNT_ARGS} ${ENV_ARGS}"
+[[ -n "$CURRENT_ENTRYPOINT" ]] && RUN_CMD="${RUN_CMD} --entrypoint ${CURRENT_ENTRYPOINT}"
+RUN_CMD="${RUN_CMD} ${CURRENT_IMAGE}"
+[[ -n "$CURRENT_CMD" ]] && RUN_CMD="${RUN_CMD} ${CURRENT_CMD}"
+
+# Esegui
+eval "$RUN_CMD" >/dev/null 2>&1
+
+if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
+    print_status "Container riconfigurato con SSL"
+else
+    print_error "Errore ricreazione container"
+    exit 1
+fi
+
+sleep 3
+
 # =============================================================================
 # OUTPUT FINALE
 # =============================================================================
 
 echo ""
 echo -e "${BOLD}╔═══════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BOLD}║                    CONFIGURAZIONE COMPLETATA                  ║${NC}"
+echo -e "${BOLD}║               CONFIGURAZIONE COMPLETATA CON SUCCESSO          ║${NC}"
 echo -e "${BOLD}╚═══════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-print_warning "AZIONE RICHIESTA: Devi ricreare il container con le variabili proxy"
+print_status "Il servizio ${CONTAINER_NAME} è ora configurato per:"
 echo ""
-echo "Se usi docker run, ricrea il container con:"
+echo -e "  ${CYAN}https://${SUBDOMAIN}${NC}"
 echo ""
-echo -e "${CYAN}docker stop ${CONTAINER_NAME} && docker rm ${CONTAINER_NAME}${NC}"
-echo -e "${CYAN}docker run -d --name ${CONTAINER_NAME} \\${NC}"
-echo -e "${CYAN}  --network ${DOCKER_NETWORK} \\${NC}"
-echo -e "${CYAN}  -e VIRTUAL_HOST=${SUBDOMAIN} \\${NC}"
-echo -e "${CYAN}  -e VIRTUAL_PORT=${INTERNAL_PORT} \\${NC}"
-echo -e "${CYAN}  -e LETSENCRYPT_HOST=${SUBDOMAIN} \\${NC}"
-echo -e "${CYAN}  -e LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL} \\${NC}"
-echo -e "${CYAN}  [altre opzioni originali] <immagine>${NC}"
-echo ""
-echo "─────────────────────────────────────────────────────────────────"
-echo ""
-echo "Se usi docker-compose, aggiungi al tuo docker-compose.yml:"
-echo ""
-cat << EOF
-services:
-  ${CONTAINER_NAME}:
-    environment:
-      - VIRTUAL_HOST=${SUBDOMAIN}
-      - VIRTUAL_PORT=${INTERNAL_PORT}
-      - LETSENCRYPT_HOST=${SUBDOMAIN}
-      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
-    networks:
-      - ${DOCKER_NETWORK}
-
-networks:
-  ${DOCKER_NETWORK}:
-    external: true
-EOF
-
-echo ""
-echo "Poi: docker compose up -d"
-echo ""
-echo "─────────────────────────────────────────────────────────────────"
 
 if [[ -n "$ACME_CA_URI" ]]; then
+    print_warning "ATTENZIONE: Modalità STAGING attiva"
+    print_warning "Il certificato NON sarà valido per i browser"
     echo ""
-    print_warning "ATTENZIONE: Modalità STAGING - il certificato NON sarà valido"
 fi
 
+echo "Monitoraggio certificato SSL:"
+echo "  docker logs -f nginx-proxy-acme"
 echo ""
-echo "Verifica:"
-echo "  docker logs nginx-proxy-acme -f     # Log certificati"
-echo "  curl -I https://${SUBDOMAIN}        # Test (dopo DNS ok)"
+echo "Il certificato verrà emesso automaticamente in 1-2 minuti."
+echo "Controlla i log per confermare:"
+echo "  docker logs nginx-proxy-acme 2>&1 | grep '${SUBDOMAIN}'"
+echo ""
+echo "Test rapido (dopo 1-2 min):"
+echo "  curl -I https://${SUBDOMAIN}"
 echo ""
 
 # Chiedi se configurare altro
