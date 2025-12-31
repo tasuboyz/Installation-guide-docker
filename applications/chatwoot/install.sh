@@ -126,15 +126,6 @@ echo ""
 echo -e "${CYAN}STEP 4/6${NC} - Generazione credenziali"
 echo ""
 
-# Download .env template se non esiste
-if [[ ! -f .env.example ]]; then
-    print_info "Download template .env..."
-    wget -q -O .env.example https://raw.githubusercontent.com/chatwoot/chatwoot/develop/.env.example
-fi
-
-# Copia template
-cp .env.example .env
-
 # Generate secrets
 SECRET_KEY_BASE=$(openssl rand -hex 64)
 POSTGRES_PASSWORD=$(openssl rand -hex 16)
@@ -144,42 +135,56 @@ print_status "Credenziali generate:"
 echo "   POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
 echo "   REDIS_PASSWORD=$REDIS_PASSWORD"
 
-# Configura .env
-{
-    echo ""
-    echo "# === Generato da install.sh ==="
-    echo "SECRET_KEY_BASE=$SECRET_KEY_BASE"
-    echo "RAILS_ENV=production"
-    echo "POSTGRES_DB=chatwoot"
-    echo "POSTGRES_USER=postgres"
-    echo "POSTGRES_PASSWORD=$POSTGRES_PASSWORD"
-    echo "REDIS_PASSWORD=$REDIS_PASSWORD"
-    echo "REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379"
-} >> .env
+# Crea .env minimale e funzionante (NON copiare .env.example upstream che ha problemi di formattazione)
+cat > .env << ENV_EOF
+# Chatwoot Environment Configuration
+# Generato da install.sh
+
+# === Credenziali ===
+SECRET_KEY_BASE=${SECRET_KEY_BASE}
+RAILS_ENV=production
+
+# === Database ===
+POSTGRES_HOST=postgres
+POSTGRES_DB=chatwoot
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+
+# === Redis ===
+REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+REDIS_PASSWORD=${REDIS_PASSWORD}
+
+# === Applicazione ===
+RAILS_MAX_THREADS=5
+RAILS_LOG_TO_STDOUT=true
+LOG_LEVEL=info
+ENABLE_ACCOUNT_SIGNUP=true
+ACTIVE_STORAGE_SERVICE=local
+ENV_EOF
 
 # Configura dominio se specificato
 if [[ "$USE_PROXY" == "true" ]]; then
-    {
-        echo ""
-        echo "# === Configurazione Dominio e SSL ==="
-        echo "FRONTEND_URL=https://$CHATWOOT_DOMAIN"
-        echo "FORCE_SSL=true"
-        echo ""
-        echo "# Variabili per nginx-proxy + acme-companion"
-        echo "VIRTUAL_HOST=$CHATWOOT_DOMAIN"
-        echo "VIRTUAL_PORT=3000"
-        echo "LETSENCRYPT_HOST=$CHATWOOT_DOMAIN"
-        echo "LETSENCRYPT_EMAIL=$LETSENCRYPT_EMAIL"
-        echo "DOCKER_NETWORK=$DOCKER_NETWORK"
-    } >> .env
+    cat >> .env << ENV_EOF
+
+# === Dominio e SSL ===
+FRONTEND_URL=https://${CHATWOOT_DOMAIN}
+FORCE_SSL=true
+
+# === nginx-proxy + acme-companion ===
+VIRTUAL_HOST=${CHATWOOT_DOMAIN}
+VIRTUAL_PORT=3000
+LETSENCRYPT_HOST=${CHATWOOT_DOMAIN}
+LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
+DOCKER_NETWORK=${DOCKER_NETWORK}
+ENV_EOF
     print_status "Configurazione dominio aggiunta a .env"
 else
-    {
-        echo ""
-        echo "# === Configurazione Locale ==="
-        echo "FRONTEND_URL=http://0.0.0.0:3000"
-        echo "FORCE_SSL=false"
-    } >> .env
+    cat >> .env << ENV_EOF
+
+# === Configurazione Locale ===
+FRONTEND_URL=http://0.0.0.0:3000
+FORCE_SSL=false
+ENV_EOF
     print_status "Configurazione locale aggiunta a .env"
 fi
 
