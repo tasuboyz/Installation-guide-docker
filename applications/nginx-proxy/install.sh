@@ -100,7 +100,8 @@ if [[ -n "$DOCKER_NETWORK" ]]; then
     echo "Rete attuale (da .env): ${DOCKER_NETWORK}"
     read -p "Usare questa rete? [Y/n]: " USE_NET
     USE_NET=${USE_NET:-y}
-    [[ "$(echo "$USE_NET" | tr '[:upper:]' '[:lower:]')" != "y" ]] && DOCKER_NETWORK=""
+    USE_NET_LOWER=$(echo "$USE_NET" | tr '[:upper:]' '[:lower:]')
+    [[ "$USE_NET_LOWER" != "y" ]] && DOCKER_NETWORK=""
 fi
 
 if [[ -z "$DOCKER_NETWORK" ]]; then
