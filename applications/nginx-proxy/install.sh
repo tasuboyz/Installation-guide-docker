@@ -52,7 +52,13 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-if ! docker compose version &> /dev/null; then
+DCMD=""
+# Rileva se è disponibile il plugin `docker compose` oppure il binario legacy `docker-compose`
+if command -v docker &> /dev/null && docker compose version &> /dev/null; then
+    DCMD="docker compose"
+elif command -v docker-compose &> /dev/null && docker-compose version &> /dev/null; then
+    DCMD="docker-compose"
+else
     print_error "Docker Compose non disponibile"
     exit 1
 fi
@@ -176,12 +182,12 @@ chmod 755 vhost-configs
 # Stop se running
 if docker ps --format '{{.Names}}' | grep -q "nginx-proxy"; then
     echo "Riavvio proxy..."
-    docker compose down 2>/dev/null || true
+    $DCMD down 2>/dev/null || true
     sleep 2
 fi
 
 echo "Avvio container..."
-docker compose up -d
+$DCMD up -d
 sleep 5
 
 if docker ps --format '{{.Names}}' | grep -q "nginx-proxy"; then

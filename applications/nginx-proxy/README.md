@@ -164,16 +164,46 @@ docker volume rm nginx-certs nginx-vhost nginx-html acme-state
 sudo ./install.sh
 ```
 
+## Nuovi Script Helper 🆕
+
+Dopo il setup iniziale, usa questi script per gestione rapida:
+
+```bash
+# ⭐ QUICK START - Setup automatico completo
+./setup-domains.sh
+
+# 🔍 Leggi URL configurati
+./list-configured-urls.sh
+
+# 📊 Diagnostica completa stato sistema
+./diagnose.sh
+```
+
 ## Struttura File
 
 ```
 nginx-proxy/
-├── docker-compose.yml      # nginx-proxy + acme-companion
-├── custom-nginx.conf       # Configurazione globale nginx
-├── .env                    # Generato automaticamente
-├── install.sh              # ⭐ SCRIPT PRINCIPALE
-├── configs/                # Backup configurazioni servizi
-└── vhost-configs/          # Configurazioni vhost (non usato con acme-companion)
+├── docker-compose.yml           # nginx-proxy + acme-companion
+├── custom-nginx.conf            # Configurazione globale nginx
+├── .env                         # Generato automaticamente
+├── .env.domains                 # Generato da setup-domains.sh
+│
+├── install.sh                   # ⭐ SCRIPT PRINCIPALE (step-by-step)
+├── setup-domains.sh             # ⭐ QUICK HELPER (automatico)
+├── list-configured-urls.sh      # 🔍 Visualizza URL salvati
+├── diagnose.sh                  # 📊 Diagnostica completa
+│
+├── configs/                     # Backup configurazioni servizi (auto)
+│   ├── retell-backend.conf
+│   ├── portainer.conf
+│   └── ...
+│
+├── vhost-configs/               # Configurazioni vhost nginx (auto)
+│   └── ...
+│
+├── README.md                    # Questo file
+├── QUICK_START.md               # ⚡ Quick reference (5 min setup)
+└── CHEATSHEET.md                # 📝 Comandi frequenti
 ```
 
 ## Caratteristiche
