@@ -42,7 +42,7 @@ print_header() {
 sh_quote() {
     local s
     s="$1"
-    s="${s//'/"'"'}"
+    s="${s//\'/\'\\\'\'}"
     printf "'%s'" "$s"
 }
 
