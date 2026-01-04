@@ -422,7 +422,7 @@ if [[ "$SKIP_RECREATION" == "false" ]]; then
     ENV_ARGS=""
     while IFS= read -r env; do
         # Skip env già presenti che sovrascriveremo
-        if [[ ! "$env" =~ ^VIRTUAL_HOST= ]] && [[ ! "$env" =~ ^VIRTUAL_PORT= ]] && [[ ! "$env" =~ ^LETSENCRYPT_HOST= ]] && [[ ! "$env" =~ ^LETSENCRYPT_EMAIL= ]]; then
+        if [[ -n "$env" ]] && [[ ! "$env" =~ ^VIRTUAL_HOST= ]] && [[ ! "$env" =~ ^VIRTUAL_PORT= ]] && [[ ! "$env" =~ ^LETSENCRYPT_HOST= ]] && [[ ! "$env" =~ ^LETSENCRYPT_EMAIL= ]]; then
             ENV_ARGS="${ENV_ARGS} -e ${env}"
         fi
     done < <(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Env}}{{println .}}{{end}}')
@@ -441,9 +441,24 @@ if [[ "$SKIP_RECREATION" == "false" ]]; then
 
     # Costruisci comando run per container temporaneo
     RUN_CMD="docker run -d --name ${TMP_NAME} --network ${DOCKER_NETWORK} --restart unless-stopped ${MOUNT_ARGS} ${ENV_ARGS}"
-    [[ -n "$CURRENT_ENTRYPOINT" ]] && RUN_CMD="${RUN_CMD} --entrypoint ${CURRENT_ENTRYPOINT}"
+    # Escape entrypoint and cmd parts to avoid shell syntax errors when using eval
+    if [[ -n "$CURRENT_ENTRYPOINT" ]]; then
+        # Quote the entrypoint as a single token
+        EP_ESCAPED=$(printf "'%s'" "$CURRENT_ENTRYPOINT")
+        RUN_CMD="${RUN_CMD} --entrypoint ${EP_ESCAPED}"
+    fi
+
     RUN_CMD="${RUN_CMD} ${CURRENT_IMAGE}"
-    [[ -n "$CURRENT_CMD" ]] && RUN_CMD="${RUN_CMD} ${CURRENT_CMD}"
+    if [[ -n "$CURRENT_CMD" ]]; then
+        # Escape each word of CURRENT_CMD to preserve special chars
+        CMD_ESCAPED=""
+        # Use word-splitting to iterate tokens safely
+        read -r -a _cmd_array <<< "$CURRENT_CMD"
+        for _tok in "${_cmd_array[@]}"; do
+            CMD_ESCAPED+=" $(printf "'%s'" "${_tok}")"
+        done
+        RUN_CMD="${RUN_CMD}${CMD_ESCAPED}"
+    fi
 
     # Esegui il container temporaneo
     # NOTE: debug: mostriamo il comando e non silenziamo gli errori per diagnosticare il problema
