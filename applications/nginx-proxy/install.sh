@@ -93,8 +93,34 @@ if [[ -f .env ]]; then
 fi
 
 echo "Reti Docker esistenti:"
-docker network ls --format "  * {{.Name}}" | grep -v "bridge\|host\|none" || echo "  nessuna"
+docker network ls --format "table {{.Name}}\t{{.Driver}}\t{{.Scope}}" | grep -v "^bridge\|^host\|^none\|^NETWORK" || echo "  nessuna"
 echo ""
+
+# Rileva automaticamente la rete più comune tra i container esistenti
+AUTO_DETECTED_NET=""
+CONTAINERS=$(docker ps --format '{{.Names}}' | grep -v "nginx-proxy" | head -5)
+if [[ -n "$CONTAINERS" ]]; then
+    echo "Rilevamento automatico rete dai container esistenti..."
+    declare -A NET_COUNT
+    for c in $CONTAINERS; do
+        CNETS=$(docker inspect "$c" --format='{{range $n,$v := .NetworkSettings.Networks}}{{$n}} {{end}}' 2>/dev/null)
+        for n in $CNETS; do
+            [[ "$n" =~ ^(bridge|host|none)$ ]] && continue
+            NET_COUNT[$n]=$((${NET_COUNT[$n]:-0} + 1))
+        done
+    done
+    
+    # Trova la rete più usata
+    MAX_COUNT=0
+    for net in "${!NET_COUNT[@]}"; do
+        if [[ ${NET_COUNT[$net]} -gt $MAX_COUNT ]]; then
+            MAX_COUNT=${NET_COUNT[$net]}
+            AUTO_DETECTED_NET="$net"
+        fi
+    done
+    
+    [[ -n "$AUTO_DETECTED_NET" ]] && echo "  → Rete rilevata automaticamente: ${AUTO_DETECTED_NET} (usata da ${MAX_COUNT} container)"
+fi
 
 if [[ -n "$DOCKER_NETWORK" ]]; then
     echo "Rete attuale da .env: ${DOCKER_NETWORK}"
@@ -105,8 +131,13 @@ if [[ -n "$DOCKER_NETWORK" ]]; then
 fi
 
 if [[ -z "$DOCKER_NETWORK" ]]; then
-    read -p "Nome rete Docker [default: glpi-net]: " DOCKER_NETWORK
-    DOCKER_NETWORK=${DOCKER_NETWORK:-glpi-net}
+    if [[ -n "$AUTO_DETECTED_NET" ]]; then
+        read -p "Nome rete Docker [default: ${AUTO_DETECTED_NET}]: " DOCKER_NETWORK
+        DOCKER_NETWORK=${DOCKER_NETWORK:-$AUTO_DETECTED_NET}
+    else
+        read -p "Nome rete Docker [default: glpi-net]: " DOCKER_NETWORK
+        DOCKER_NETWORK=${DOCKER_NETWORK:-glpi-net}
+    fi
 fi
 
 if ! docker network ls --format '{{.Name}}' | grep -q "^${DOCKER_NETWORK}$"; then
@@ -458,8 +489,21 @@ if [[ "$SKIP_RECREATION" == "false" ]]; then
     echo "  - Creazione nuovo container temporaneo per applicare la configurazione SSL (swap non distruttivo)..."
     TMP_NAME="${CONTAINER_NAME}.__new__.$RANDOM"
 
+    # Rileva tutte le reti del container originale per preservarle
+    ORIGINAL_NETWORKS=$(docker inspect "$CONTAINER_NAME" --format='{{range $n,$v := .NetworkSettings.Networks}}{{$n}} {{end}}' 2>/dev/null | xargs)
+    echo "  → Reti originali rilevate: ${ORIGINAL_NETWORKS}"
+    
+    # Costruisci argomenti per tutte le reti (prima rete con --network, altre con network connect dopo)
+    PRIMARY_NET="${DOCKER_NETWORK}"
+    ADDITIONAL_NETS=""
+    for net in $ORIGINAL_NETWORKS; do
+        if [[ "$net" != "$DOCKER_NETWORK" ]]; then
+            ADDITIONAL_NETS="${ADDITIONAL_NETS} ${net}"
+        fi
+    done
+    
     # Costruisci comando run per container temporaneo
-    RUN_CMD="docker run -d --name ${TMP_NAME} --network ${DOCKER_NETWORK} --restart unless-stopped ${MOUNT_ARGS} ${ENV_ARGS}"
+    RUN_CMD="docker run -d --name ${TMP_NAME} --network ${PRIMARY_NET} --restart unless-stopped ${MOUNT_ARGS} ${ENV_ARGS}"
     # Escape entrypoint and cmd parts to avoid shell syntax errors when using eval
     if [[ -n "$CURRENT_ENTRYPOINT" ]]; then
         EP_ESCAPED=$(sh_quote "$CURRENT_ENTRYPOINT")
@@ -523,6 +567,16 @@ if [[ "$SKIP_RECREATION" == "false" ]]; then
             fi
         else
             print_status "Container temporaneo in esecuzione"
+
+            # Connetti alle reti aggiuntive (quelle originali che non sono la rete primaria)
+            if [[ -n "$ADDITIONAL_NETS" ]]; then
+                echo "  → Connessione alle reti aggiuntive:${ADDITIONAL_NETS}"
+                for net in $ADDITIONAL_NETS; do
+                    docker network connect "$net" "$TMP_NAME" 2>/dev/null || true
+                    echo "    • $net"
+                done
+                print_status "Reti aggiuntive connesse"
+            fi
 
             # Ora esegui lo swap: ferma il container originale, rinominalo come backup, rinomina il nuovo col nome originale
             BACKUP_NAME="${CONTAINER_NAME}.__old__.$(date +%s)"
