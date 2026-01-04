@@ -38,6 +38,14 @@ print_header() {
     echo ""
 }
 
+# Quote for safe shell usage: wrap in single quotes and escape internal single quotes
+sh_quote() {
+    local s
+    s="$1"
+    s="${s//'/"'"'}"
+    printf "'%s'" "$s"
+}
+
 # =============================================================================
 # PREREQUISITI
 # =============================================================================
@@ -412,9 +420,9 @@ if [[ "$SKIP_RECREATION" == "false" ]]; then
         SRC=$(echo "$mount" | jq -r '.Source' 2>/dev/null || echo "")
         DST=$(echo "$mount" | jq -r '.Destination' 2>/dev/null || echo "")
         if [[ "$TYPE" == "bind" ]] && [[ -n "$SRC" ]] && [[ -n "$DST" ]]; then
-            MOUNT_ARGS="${MOUNT_ARGS} -v ${SRC}:${DST}"
+            MOUNT_ARGS="${MOUNT_ARGS} -v $(sh_quote "${SRC}:${DST}")"
         elif [[ "$TYPE" == "volume" ]] && [[ -n "$SRC" ]] && [[ -n "$DST" ]]; then
-            MOUNT_ARGS="${MOUNT_ARGS} -v ${SRC}:${DST}"
+            MOUNT_ARGS="${MOUNT_ARGS} -v $(sh_quote "${SRC}:${DST}")"
         fi
     done < <(docker inspect "$CONTAINER_NAME" --format='{{json .Mounts}}' 2>/dev/null | jq -c '.[]' 2>/dev/null || echo '{}')
 
@@ -423,15 +431,15 @@ if [[ "$SKIP_RECREATION" == "false" ]]; then
     while IFS= read -r env; do
         # Skip env già presenti che sovrascriveremo
         if [[ -n "$env" ]] && [[ ! "$env" =~ ^VIRTUAL_HOST= ]] && [[ ! "$env" =~ ^VIRTUAL_PORT= ]] && [[ ! "$env" =~ ^LETSENCRYPT_HOST= ]] && [[ ! "$env" =~ ^LETSENCRYPT_EMAIL= ]]; then
-            ENV_ARGS="${ENV_ARGS} -e ${env}"
+            ENV_ARGS="${ENV_ARGS} -e $(sh_quote "${env}")"
         fi
     done < <(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Env}}{{println .}}{{end}}')
 
     # Aggiungi variabili per acme-companion
-    ENV_ARGS="${ENV_ARGS} -e VIRTUAL_HOST=${SUBDOMAIN}"
-    ENV_ARGS="${ENV_ARGS} -e VIRTUAL_PORT=${INTERNAL_PORT}"
-    ENV_ARGS="${ENV_ARGS} -e LETSENCRYPT_HOST=${SUBDOMAIN}"
-    ENV_ARGS="${ENV_ARGS} -e LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}"
+    ENV_ARGS="${ENV_ARGS} -e $(sh_quote "VIRTUAL_HOST=${SUBDOMAIN}")"
+    ENV_ARGS="${ENV_ARGS} -e $(sh_quote "VIRTUAL_PORT=${INTERNAL_PORT}")"
+    ENV_ARGS="${ENV_ARGS} -e $(sh_quote "LETSENCRYPT_HOST=${SUBDOMAIN}")"
+    ENV_ARGS="${ENV_ARGS} -e $(sh_quote "LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}")"
 fi
 
 if [[ "$SKIP_RECREATION" == "false" ]]; then
@@ -443,8 +451,7 @@ if [[ "$SKIP_RECREATION" == "false" ]]; then
     RUN_CMD="docker run -d --name ${TMP_NAME} --network ${DOCKER_NETWORK} --restart unless-stopped ${MOUNT_ARGS} ${ENV_ARGS}"
     # Escape entrypoint and cmd parts to avoid shell syntax errors when using eval
     if [[ -n "$CURRENT_ENTRYPOINT" ]]; then
-        # Quote the entrypoint as a single token
-        EP_ESCAPED=$(printf "'%s'" "$CURRENT_ENTRYPOINT")
+        EP_ESCAPED=$(sh_quote "$CURRENT_ENTRYPOINT")
         RUN_CMD="${RUN_CMD} --entrypoint ${EP_ESCAPED}"
     fi
 
@@ -455,7 +462,7 @@ if [[ "$SKIP_RECREATION" == "false" ]]; then
         # Use word-splitting to iterate tokens safely
         read -r -a _cmd_array <<< "$CURRENT_CMD"
         for _tok in "${_cmd_array[@]}"; do
-            CMD_ESCAPED+=" $(printf "'%s'" "${_tok}")"
+            CMD_ESCAPED+=" $(sh_quote "${_tok}")"
         done
         RUN_CMD="${RUN_CMD}${CMD_ESCAPED}"
     fi
