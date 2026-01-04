@@ -100,7 +100,7 @@ if [[ -n "${DOCKER_NETWORK:-}" ]]; then
     echo "Rete attuale (da .env): ${DOCKER_NETWORK}"
     read -p "Usare questa rete? [Y/n]: " USE_NET
     USE_NET=${USE_NET:-y}
-    [[ "${USE_NET,,}" != "y" ]] && DOCKER_NETWORK=""
+    [[ "$(echo "$USE_NET" | tr '[:upper:]' '[:lower:]')" != "y" ]] && DOCKER_NETWORK=""
 fi
 
 if [[ -z "$DOCKER_NETWORK" ]]; then
@@ -112,7 +112,7 @@ if ! docker network ls --format '{{.Name}}' | grep -q "^${DOCKER_NETWORK}$"; the
     print_warning "Rete '${DOCKER_NETWORK}' non esiste"
     read -p "Crearla? [Y/n]: " CREATE_NET
     CREATE_NET=${CREATE_NET:-y}
-    if [[ "${CREATE_NET,,}" == "y" ]]; then
+    if [[ "$(echo "$CREATE_NET" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
         docker network create "${DOCKER_NETWORK}"
         print_status "Rete creata"
     else
@@ -133,7 +133,7 @@ if [[ -n "${LETSENCRYPT_EMAIL:-}" ]]; then
     echo "Email attuale: ${LETSENCRYPT_EMAIL}"
     read -p "Usare questa email? [Y/n]: " USE_EMAIL
     USE_EMAIL=${USE_EMAIL:-y}
-    [[ "${USE_EMAIL,,}" != "y" ]] && LETSENCRYPT_EMAIL=""
+    [[ "$(echo "$USE_EMAIL" | tr '[:upper:]' '[:lower:]')" != "y" ]] && LETSENCRYPT_EMAIL=""
 fi
 
 if [[ -z "$LETSENCRYPT_EMAIL" ]]; then
@@ -305,7 +305,7 @@ if [[ -n "$PORTS" ]]; then
         echo "Porta rilevata: ${INTERNAL_PORT}"
         read -p "Usare questa porta? [Y/n]: " USE_PORT
         USE_PORT=${USE_PORT:-y}
-        if [[ "${USE_PORT,,}" != "y" ]]; then
+        if [[ "$(echo "$USE_PORT" | tr '[:upper:]' '[:lower:]')" != "y" ]]; then
             read -p "Inserisci porta: " INTERNAL_PORT
         fi
     else
@@ -352,7 +352,7 @@ echo ""
 read -p "Procedo con la configurazione automatica? [Y/n]: " CONFIRM
 CONFIRM=${CONFIRM:-y}
 
-if [[ "${CONFIRM,,}" != "y" ]]; then
+if [[ "$(echo "$CONFIRM" | tr '[:upper:]' '[:lower:]')" != "y" ]]; then
     echo "Annullato"
     exit 0
 fi
@@ -541,7 +541,7 @@ if [[ "$SKIP_RECREATION" == "false" ]]; then
             echo ""
             read -p "Vuoi rimuovere il container di backup ${BACKUP_NAME}? [y/N]: " REMOVE_BACKUP
             REMOVE_BACKUP=${REMOVE_BACKUP:-n}
-            if [[ "${REMOVE_BACKUP,,}" == "y" ]]; then
+            if [[ "$(echo "$REMOVE_BACKUP" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
                 docker rm -f "$BACKUP_NAME" >/dev/null 2>&1 || true
                 print_status "Backup rimosso: ${BACKUP_NAME}"
             else
@@ -625,7 +625,7 @@ echo ""
 # Chiedi se configurare altro
 read -p "Configurare un altro servizio? [y/N]: " ANOTHER
 ANOTHER=${ANOTHER:-n}
-if [[ "${ANOTHER,,}" == "y" ]]; then
+if [[ "$(echo "$ANOTHER" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
     exec "$0"
 fi
 
