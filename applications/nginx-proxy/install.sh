@@ -222,7 +222,7 @@ print_header "STEP 5/8 - Seleziona Container da Esporre"
 CONTAINERS=$(docker ps --format '{{.Names}}' | grep -v "nginx-proxy" | sort)
 
 if [[ -z "$CONTAINERS" ]]; then
-    print_warning "Nessun container trovato (oltre a nginx-proxy)"
+    print_warning "Nessun container trovato oltre a nginx-proxy"
     echo ""
     echo "Avvia prima il servizio da esporre, poi riesegui:"
     echo "  sudo ./install.sh"
@@ -236,7 +236,7 @@ declare -A CMAP
 while IFS= read -r c; do
     IMG=$(docker inspect "$c" --format='{{.Config.Image}}' 2>/dev/null | rev | cut -d/ -f1 | rev | cut -d: -f1)
     PTS=$(docker inspect "$c" --format='{{range $p,$v := .Config.ExposedPorts}}{{$p}} {{end}}' 2>/dev/null | tr -d '/tcpud' | xargs)
-    printf "  %2d) %-25s [%s] ports: %s\n" "$i" "$c" "$IMG" "${PTS:-n/a}"
+    printf "  %2d. %-25s [%s] ports: %s\n" "$i" "$c" "$IMG" "${PTS:-n/a}"
     CMAP[$i]="$c"
     ((i++))
 done <<< "$CONTAINERS"
