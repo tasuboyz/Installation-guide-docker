@@ -13,7 +13,7 @@ services:
       - ./custom-nginx.conf:/etc/nginx/conf.d/custom.conf:ro
       - ./vhost-configs:/etc/nginx/vhost.d:rw
     labels:
-      - "com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy"
+      - "com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy=true"
     networks:
       - app-network
       - proxy-network
