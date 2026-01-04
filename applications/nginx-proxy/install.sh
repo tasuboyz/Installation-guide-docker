@@ -446,8 +446,10 @@ if [[ "$SKIP_RECREATION" == "false" ]]; then
     [[ -n "$CURRENT_CMD" ]] && RUN_CMD="${RUN_CMD} ${CURRENT_CMD}"
 
     # Esegui il container temporaneo
+    # NOTE: debug: mostriamo il comando e non silenziamo gli errori per diagnosticare il problema
+    echo "RUN_CMD: $RUN_CMD"
     set +e
-    NEW_ID=$(eval "$RUN_CMD" 2>/dev/null)
+    NEW_ID=$(eval "$RUN_CMD")
     RC=$?
     set -e
     if [[ $RC -ne 0 ]] || [[ -z "$NEW_ID" ]]; then
