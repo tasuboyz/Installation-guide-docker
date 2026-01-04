@@ -154,8 +154,8 @@ print_status "Email: ${LETSENCRYPT_EMAIL}"
 
 print_header "STEP 3/8 - Modalità SSL"
 
-echo "  1. PRODUZIONE - certificati validi (limite: 5/settimana per dominio)"
-echo "  2. STAGING    - certificati test (illimitati, per debug)"
+echo "  1. PRODUZIONE - certificati validi limite: 5/settimana per dominio"
+echo "  2. STAGING    - certificati test illimitati, per debug"
 echo ""
 read -p "Scegli [1/2, default: 1]: " SSL_CHOICE
 SSL_CHOICE=${SSL_CHOICE:-1}
@@ -348,7 +348,7 @@ echo "  Sottodominio:  ${SUBDOMAIN}"
 echo "  Porta:         ${INTERNAL_PORT}"
 echo "  Email:         ${LETSENCRYPT_EMAIL}"
 echo "  Rete:          ${DOCKER_NETWORK}"
-echo "  Modalità:      $(if [[ -n "$ACME_CA_URI" ]]; then echo 'STAGING (test)'; else echo 'PRODUZIONE'; fi)"
+echo "  Modalità:      $(if [[ -n "$ACME_CA_URI" ]]; then echo 'STAGING test'; else echo 'PRODUZIONE'; fi)"
 echo ""
 read -p "Procedo con la configurazione automatica? [Y/n]: " CONFIRM
 CONFIRM=${CONFIRM:-y}
@@ -445,7 +445,7 @@ fi
 
 if [[ "$SKIP_RECREATION" == "false" ]]; then
     # Ricreazione NON distruttiva: crea un nuovo container temporaneo, verifica, poi swap dei nomi
-    echo "  → Creazione nuovo container temporaneo per applicare la configurazione SSL (swap non distruttivo)..."
+    echo "  - Creazione nuovo container temporaneo per applicare la configurazione SSL (swap non distruttivo)..."
     TMP_NAME="${CONTAINER_NAME}.__new__.$RANDOM"
 
     # Costruisci comando run per container temporaneo
@@ -619,7 +619,7 @@ echo "Il certificato verrà emesso automaticamente in 1-2 minuti."
 echo "Controlla i log per confermare:"
 echo "  docker logs nginx-proxy-acme 2>&1 | grep '${SUBDOMAIN}'"
 echo ""
-echo "Test rapido (dopo 1-2 min):"
+echo "Test rapido dopo 1-2 min:"
 echo "  curl -I https://${SUBDOMAIN}"
 echo ""
 
