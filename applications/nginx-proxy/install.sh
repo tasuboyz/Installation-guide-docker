@@ -93,7 +93,7 @@ if [[ -f .env ]]; then
 fi
 
 echo "Reti Docker esistenti:"
-docker network ls --format "  • {{.Name}}" | grep -v "bridge\|host\|none" || echo "  (nessuna)"
+docker network ls --format "  * {{.Name}}" | grep -v "bridge\|host\|none" || echo "  (nessuna)"
 echo ""
 
 if [[ -n "${DOCKER_NETWORK:-}" ]]; then
