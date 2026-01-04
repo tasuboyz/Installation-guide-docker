@@ -154,8 +154,8 @@ print_status "Email: ${LETSENCRYPT_EMAIL}"
 
 print_header "STEP 3/8 - Modalità SSL"
 
-echo "  1) PRODUZIONE - certificati validi (limite: 5/settimana per dominio)"
-echo "  2) STAGING    - certificati test (illimitati, per debug)"
+echo "  1. PRODUZIONE - certificati validi (limite: 5/settimana per dominio)"
+echo "  2. STAGING    - certificati test (illimitati, per debug)"
 echo ""
 read -p "Scegli [1/2, default: 1]: " SSL_CHOICE
 SSL_CHOICE=${SSL_CHOICE:-1}
@@ -314,7 +314,7 @@ if [[ -n "$PORTS" ]]; then
         j=1
         declare -A PMAP
         for p in "${PARR[@]}"; do
-            echo "  $j) $p"
+            echo "  $j. $p"
             PMAP[$j]="$p"
             ((j++))
         done
