@@ -400,6 +400,10 @@ else
     CURRENT_IMAGE=$(docker inspect "$CONTAINER_NAME" --format='{{.Config.Image}}')
     CURRENT_CMD=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Cmd}}{{.}} {{end}}')
     CURRENT_ENTRYPOINT=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Entrypoint}}{{.}} {{end}}')
+
+    # Trim leading/trailing whitespace (fixes accidental trailing space in templates)
+    CURRENT_CMD=$(echo "$CURRENT_CMD" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+    CURRENT_ENTRYPOINT=$(echo "$CURRENT_ENTRYPOINT" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
 fi
 
 # Rilevamento servizi speciali che richiedono configurazione custom
