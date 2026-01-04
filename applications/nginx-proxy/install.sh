@@ -416,6 +416,8 @@ fi
 if [[ "$SKIP_RECREATION" == "false" ]]; then
     # Volumi (bind mounts e named volumes)
     MOUNT_ARGS=""
+    TMP_MOUNTS=$(mktemp)
+    docker inspect "$CONTAINER_NAME" --format='{{json .Mounts}}' 2>/dev/null | jq -c '.[]' 2>/dev/null > "$TMP_MOUNTS" || echo '{}' > "$TMP_MOUNTS"
     while IFS= read -r mount; do
         TYPE=$(echo "$mount" | jq -r '.Type' 2>/dev/null || echo "unknown")
         SRC=$(echo "$mount" | jq -r '.Source' 2>/dev/null || echo "")
@@ -425,16 +427,20 @@ if [[ "$SKIP_RECREATION" == "false" ]]; then
         elif [[ "$TYPE" == "volume" ]] && [[ -n "$SRC" ]] && [[ -n "$DST" ]]; then
             MOUNT_ARGS="${MOUNT_ARGS} -v $(sh_quote "${SRC}:${DST}")"
         fi
-    done < <(docker inspect "$CONTAINER_NAME" --format='{{json .Mounts}}' 2>/dev/null | jq -c '.[]' 2>/dev/null || echo '{}')
+    done < "$TMP_MOUNTS"
+    rm -f "$TMP_MOUNTS"
 
     # Environment variables (preserva esistenti + aggiungi proxy vars)
     ENV_ARGS=""
+    TMP_ENVS=$(mktemp)
+    docker inspect "$CONTAINER_NAME" --format='{{range .Config.Env}}{{println .}}{{end}}' > "$TMP_ENVS"
     while IFS= read -r env; do
         # Skip env già presenti che sovrascriveremo
         if [[ -n "$env" ]] && [[ ! "$env" =~ ^VIRTUAL_HOST= ]] && [[ ! "$env" =~ ^VIRTUAL_PORT= ]] && [[ ! "$env" =~ ^LETSENCRYPT_HOST= ]] && [[ ! "$env" =~ ^LETSENCRYPT_EMAIL= ]]; then
             ENV_ARGS="${ENV_ARGS} -e $(sh_quote "${env}")"
         fi
-    done < <(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Env}}{{println .}}{{end}}')
+    done < "$TMP_ENVS"
+    rm -f "$TMP_ENVS"
 
     # Aggiungi variabili per acme-companion
     ENV_ARGS="${ENV_ARGS} -e $(sh_quote "VIRTUAL_HOST=${SUBDOMAIN}")"
