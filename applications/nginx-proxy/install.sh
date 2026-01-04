@@ -96,7 +96,7 @@ echo "Reti Docker esistenti:"
 docker network ls --format "  * {{.Name}}" | grep -v "bridge\|host\|none" || echo "  nessuna"
 echo ""
 
-if [[ -n "${DOCKER_NETWORK:-}" ]]; then
+if [[ -n "$DOCKER_NETWORK" ]]; then
     echo "Rete attuale (da .env): ${DOCKER_NETWORK}"
     read -p "Usare questa rete? [Y/n]: " USE_NET
     USE_NET=${USE_NET:-y}
@@ -129,7 +129,7 @@ fi
 
 print_header "STEP 2/8 - Email Let's Encrypt"
 
-if [[ -n "${LETSENCRYPT_EMAIL:-}" ]]; then
+if [[ -n "$LETSENCRYPT_EMAIL" ]]; then
     echo "Email attuale: ${LETSENCRYPT_EMAIL}"
     read -p "Usare questa email? [Y/n]: " USE_EMAIL
     USE_EMAIL=${USE_EMAIL:-y}
@@ -243,7 +243,7 @@ done <<< "$CONTAINERS"
 echo ""
 read -p "Seleziona [1-$((i-1))]: " CCHOICE
 
-if [[ -z "${CMAP[$CCHOICE]:-}" ]]; then
+if [[ -z "${CMAP[$CCHOICE]}" ]]; then
     print_error "Selezione non valida"
     exit 1
 fi
