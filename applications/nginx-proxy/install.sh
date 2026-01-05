@@ -423,20 +423,112 @@ CURRENT_LETSENCRYPT=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config
 # Rileva sempre l'immagine per controlli successivi
 CURRENT_IMAGE=$(docker inspect "$CONTAINER_NAME" --format='{{.Config.Image}}' 2>/dev/null || echo "")
 
-# Se già configurato correttamente, evita ricreazione
-if [[ -n "$CURRENT_VHOST" ]] && [[ -n "$CURRENT_LETSENCRYPT" ]]; then
-    print_status "Container già configurato per SSL: $SUBDOMAIN"
-    echo "  → Configurazione esistente rilevata - saltando ricreazione"
-    SKIP_RECREATION=true
-else
-    SKIP_RECREATION=false
-    echo "  → Backup configurazione container..."
-    CURRENT_CMD=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Cmd}}{{.}} {{end}}')
-    CURRENT_ENTRYPOINT=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Entrypoint}}{{.}} {{end}}')
+# Rileva se il container è gestito da docker-compose
+COMPOSE_PROJECT=$(docker inspect "$CONTAINER_NAME" --format='{{index .Config.Labels "com.docker.compose.project"}}' 2>/dev/null || echo "")
+COMPOSE_SERVICE=$(docker inspect "$CONTAINER_NAME" --format='{{index .Config.Labels "com.docker.compose.service"}}' 2>/dev/null || echo "")
+COMPOSE_WORKDIR=$(docker inspect "$CONTAINER_NAME" --format='{{index .Config.Labels "com.docker.compose.project.working_dir"}}' 2>/dev/null || echo "")
 
-    # Trim leading/trailing whitespace (fixes accidental trailing space in templates)
-    CURRENT_CMD=$(echo "$CURRENT_CMD" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-    CURRENT_ENTRYPOINT=$(echo "$CURRENT_ENTRYPOINT" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+if [[ -n "$COMPOSE_PROJECT" ]] && [[ -n "$COMPOSE_SERVICE" ]]; then
+    print_status "Container gestito da docker-compose rilevato"
+    echo "  → Progetto: ${COMPOSE_PROJECT}"
+    echo "  → Servizio: ${COMPOSE_SERVICE}"
+    [[ -n "$COMPOSE_WORKDIR" ]] && echo "  → Directory: ${COMPOSE_WORKDIR}"
+    
+    # Trova il file .env del progetto compose
+    COMPOSE_ENV_FILE=""
+    if [[ -n "$COMPOSE_WORKDIR" ]] && [[ -f "${COMPOSE_WORKDIR}/.env" ]]; then
+        COMPOSE_ENV_FILE="${COMPOSE_WORKDIR}/.env"
+    elif [[ -f "../.env" ]]; then
+        COMPOSE_ENV_FILE="../.env"
+    fi
+    
+    if [[ -n "$COMPOSE_ENV_FILE" ]]; then
+        print_status "File .env trovato: ${COMPOSE_ENV_FILE}"
+        
+        # Verifica se le variabili sono già configurate
+        if grep -q "^DOMAIN=" "$COMPOSE_ENV_FILE" 2>/dev/null && \
+           grep -q "^LETSENCRYPT_EMAIL=" "$COMPOSE_ENV_FILE" 2>/dev/null; then
+            print_status "Variabili proxy già configurate in .env"
+            
+            # Verifica se i valori corrispondono
+            CURRENT_DOMAIN=$(grep "^DOMAIN=" "$COMPOSE_ENV_FILE" | cut -d= -f2-)
+            CURRENT_EMAIL=$(grep "^LETSENCRYPT_EMAIL=" "$COMPOSE_ENV_FILE" | cut -d= -f2-)
+            
+            if [[ "$CURRENT_DOMAIN" == "$SUBDOMAIN" ]] && [[ "$CURRENT_EMAIL" == "$LETSENCRYPT_EMAIL" ]]; then
+                print_status "Configurazione corretta - nessuna modifica necessaria"
+                echo ""
+                print_warning "Per applicare modifiche future, esegui:"
+                echo "  cd ${COMPOSE_WORKDIR:-../}"
+                echo "  docker compose up -d --force-recreate ${COMPOSE_SERVICE}"
+                SKIP_RECREATION=true
+            else
+                print_warning "Valori diversi rilevati:"
+                echo "  Attuale DOMAIN: ${CURRENT_DOMAIN}"
+                echo "  Nuovo DOMAIN: ${SUBDOMAIN}"
+                read -p "Aggiornare il file .env? [Y/n]: " UPDATE_ENV
+                UPDATE_ENV=${UPDATE_ENV:-y}
+                if [[ "$(echo "$UPDATE_ENV" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
+                    # Backup .env
+                    cp "$COMPOSE_ENV_FILE" "${COMPOSE_ENV_FILE}.backup.$(date +%s)"
+                    
+                    # Aggiorna valori
+                    sed -i.tmp "s|^DOMAIN=.*|DOMAIN=${SUBDOMAIN}|" "$COMPOSE_ENV_FILE"
+                    sed -i.tmp "s|^LETSENCRYPT_EMAIL=.*|LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}|" "$COMPOSE_ENV_FILE"
+                    rm -f "${COMPOSE_ENV_FILE}.tmp"
+                    
+                    print_status "File .env aggiornato"
+                    echo ""
+                    print_warning "Riavvia il servizio per applicare:"
+                    echo "  cd ${COMPOSE_WORKDIR:-../}"
+                    echo "  docker compose up -d --force-recreate ${COMPOSE_SERVICE}"
+                fi
+                SKIP_RECREATION=true
+            fi
+        else
+            print_warning "Variabili proxy non trovate in .env"
+            read -p "Aggiungerle automaticamente? [Y/n]: " ADD_ENV
+            ADD_ENV=${ADD_ENV:-y}
+            if [[ "$(echo "$ADD_ENV" | tr '[:upper:]' '[:lower:]')" == "y" ]]; then
+                # Backup .env
+                cp "$COMPOSE_ENV_FILE" "${COMPOSE_ENV_FILE}.backup.$(date +%s)"
+                
+                # Aggiungi variabili
+                echo "" >> "$COMPOSE_ENV_FILE"
+                echo "# Nginx Proxy Configuration - Added by install.sh $(date)" >> "$COMPOSE_ENV_FILE"
+                echo "DOMAIN=${SUBDOMAIN}" >> "$COMPOSE_ENV_FILE"
+                echo "LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}" >> "$COMPOSE_ENV_FILE"
+                echo "DOCKER_NETWORK=${DOCKER_NETWORK}" >> "$COMPOSE_ENV_FILE"
+                
+                print_status "Variabili aggiunte a .env"
+                echo ""
+                print_warning "Riavvia il servizio per applicare:"
+                echo "  cd ${COMPOSE_WORKDIR:-../}"
+                echo "  docker compose up -d --force-recreate ${COMPOSE_SERVICE}"
+            fi
+            SKIP_RECREATION=true
+        fi
+    else
+        print_warning "File .env non trovato per il progetto compose"
+        print_warning "Procedo con configurazione manuale del container"
+        SKIP_RECREATION=false
+    fi
+else
+    # Container non gestito da compose - procedura standard
+    # Se già configurato correttamente, evita ricreazione
+    if [[ -n "$CURRENT_VHOST" ]] && [[ -n "$CURRENT_LETSENCRYPT" ]]; then
+        print_status "Container già configurato per SSL: $SUBDOMAIN"
+        echo "  → Configurazione esistente rilevata - saltando ricreazione"
+        SKIP_RECREATION=true
+    else
+        SKIP_RECREATION=false
+        echo "  → Backup configurazione container..."
+        CURRENT_CMD=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Cmd}}{{.}} {{end}}')
+        CURRENT_ENTRYPOINT=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Entrypoint}}{{.}} {{end}}')
+
+        # Trim leading/trailing whitespace (fixes accidental trailing space in templates)
+        CURRENT_CMD=$(echo "$CURRENT_CMD" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        CURRENT_ENTRYPOINT=$(echo "$CURRENT_ENTRYPOINT" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+    fi
 fi
 
 # Rilevamento servizi speciali che richiedono configurazione custom
