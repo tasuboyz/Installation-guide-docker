@@ -642,9 +642,8 @@ if [[ "$IS_SPECIAL_SERVICE" == "true" ]] || [[ "$SKIP_RECREATION" == "true" ]]; 
         VHOST_CONFIG+="proxy_set_header X-Real-IP \$remote_addr;\n"
     fi
     
-    # Scrivi configurazione
+    # Scrivi configurazione (il volume mount la rende automaticamente disponibile nel container)
     echo -e "$VHOST_CONFIG" > "vhost-configs/${SUBDOMAIN}"
-    docker cp "vhost-configs/${SUBDOMAIN}" nginx-proxy:"/etc/nginx/vhost.d/${SUBDOMAIN}"
     
     # Test e reload nginx
     if docker exec nginx-proxy nginx -t 2>&1 | grep -q "successful"; then
@@ -652,7 +651,7 @@ if [[ "$IS_SPECIAL_SERVICE" == "true" ]] || [[ "$SKIP_RECREATION" == "true" ]]; 
         print_status "Configurazione nginx personalizzata applicata"
     else
         print_error "Errore nella configurazione nginx - ripristino backup"
-        docker exec nginx-proxy rm -f "/etc/nginx/vhost.d/${SUBDOMAIN}" 2>/dev/null || true
+        rm -f "vhost-configs/${SUBDOMAIN}" 2>/dev/null || true
         exit 1
     fi
 fi
