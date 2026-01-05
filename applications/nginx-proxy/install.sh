@@ -420,6 +420,9 @@ echo "  → Verifica configurazione attuale..."
 CURRENT_VHOST=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Env}}{{if eq . (printf "VIRTUAL_HOST=%s" "'$SUBDOMAIN'")}}{{.}}{{end}}{{end}}' 2>/dev/null || echo "")
 CURRENT_LETSENCRYPT=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Env}}{{if eq . (printf "LETSENCRYPT_HOST=%s" "'$SUBDOMAIN'")}}{{.}}{{end}}{{end}}' 2>/dev/null || echo "")
 
+# Rileva sempre l'immagine per controlli successivi
+CURRENT_IMAGE=$(docker inspect "$CONTAINER_NAME" --format='{{.Config.Image}}' 2>/dev/null || echo "")
+
 # Se già configurato correttamente, evita ricreazione
 if [[ -n "$CURRENT_VHOST" ]] && [[ -n "$CURRENT_LETSENCRYPT" ]]; then
     print_status "Container già configurato per SSL: $SUBDOMAIN"
@@ -428,7 +431,6 @@ if [[ -n "$CURRENT_VHOST" ]] && [[ -n "$CURRENT_LETSENCRYPT" ]]; then
 else
     SKIP_RECREATION=false
     echo "  → Backup configurazione container..."
-    CURRENT_IMAGE=$(docker inspect "$CONTAINER_NAME" --format='{{.Config.Image}}')
     CURRENT_CMD=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Cmd}}{{.}} {{end}}')
     CURRENT_ENTRYPOINT=$(docker inspect "$CONTAINER_NAME" --format='{{range .Config.Entrypoint}}{{.}} {{end}}')
 
@@ -442,7 +444,7 @@ IS_SPECIAL_SERVICE=false
 SPECIAL_CONFIG=""
 
 # Portainer (HTTPS backend interno)
-if [[ "$CURRENT_IMAGE" =~ portainer ]] && [[ "$INTERNAL_PORT" == "9443" ]]; then
+if [[ -n "$CURRENT_IMAGE" ]] && [[ "$CURRENT_IMAGE" =~ portainer ]] && [[ "$INTERNAL_PORT" == "9443" ]]; then
     IS_SPECIAL_SERVICE=true
     SPECIAL_CONFIG="portainer-https"
     print_warning "Rilevato Portainer con HTTPS interno - configurazione speciale necessaria"
