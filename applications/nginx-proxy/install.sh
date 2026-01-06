@@ -244,12 +244,13 @@ else
     exit 1
 fi
 
-# Verifica che nginx-proxy risponda effettivamente
-echo "  → Verifica nginx-proxy risponde su porta 80..."
-sleep 2
+# Verifica che nginx-proxy sia running e configurato correttamente
+echo "  → Verifica configurazione nginx-proxy..."
+sleep 3
 for i in {1..10}; do
-    if docker exec nginx-proxy curl -sf http://localhost:80 >/dev/null 2>&1; then
-        print_status "nginx-proxy risponde correttamente"
+    # Verifica processo nginx attivo e test configurazione
+    if docker exec nginx-proxy sh -c "pgrep nginx && nginx -t" >/dev/null 2>&1; then
+        print_status "nginx-proxy configurato e attivo"
         break
     fi
     if [[ $i -eq 10 ]]; then
@@ -257,7 +258,7 @@ for i in {1..10}; do
         docker logs nginx-proxy --tail 30
         exit 1
     fi
-    sleep 1
+    sleep 2
 done
 
 # Check e apertura automatica firewall per porta 80/443
@@ -791,6 +792,35 @@ if [[ "$IS_SPECIAL_SERVICE" == "true" ]] || [[ "$SKIP_RECREATION" == "true" ]]; 
         exit 1
     fi
 fi
+
+# Wait for Let's Encrypt certificate to be issued (checks files inside nginx-proxy)
+wait_for_certificate() {
+    echo "  → Attendo certificato per ${SUBDOMAIN} (max 10m)..."
+    # trigger acme-companion to process current containers
+    docker restart nginx-proxy-acme >/dev/null 2>&1 || true
+
+    local attempts=0
+    local max_attempts=60
+    while [[ $attempts -lt $max_attempts ]]; do
+        # check for crt and key files
+        if docker exec nginx-proxy sh -c "test -f /etc/nginx/certs/${SUBDOMAIN}.crt && test -f /etc/nginx/certs/${SUBDOMAIN}.key" >/dev/null 2>&1; then
+            print_status "Certificato emesso per ${SUBDOMAIN}"
+            return 0
+        fi
+
+        # show recent acme logs every 6 attempts
+        if (( attempts % 6 == 0 )); then
+            echo "    (acme log preview)"
+            docker logs nginx-proxy-acme --tail 20 | sed -n '1,200p'
+        fi
+
+        attempts=$((attempts+1))
+        sleep 10
+    done
+
+    print_warning "Timeout: certificato non trovato per ${SUBDOMAIN} dopo $((max_attempts*10))s"
+    return 1
+}
 
 # =============================================================================
 # OUTPUT FINALE
