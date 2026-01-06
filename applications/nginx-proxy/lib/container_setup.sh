@@ -1,9 +1,9 @@
 #!/bin/bash
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/common.sh"
-source "${SCRIPT_DIR}/docker_ops.sh"
-source "${SCRIPT_DIR}/vhost_manager.sh"
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${LIB_DIR}/common.sh"
+source "${LIB_DIR}/docker_ops.sh"
+source "${LIB_DIR}/vhost_manager.sh"
 
 PROXY_ENV_PATTERNS="VIRTUAL_HOST VIRTUAL_PORT LETSENCRYPT_HOST LETSENCRYPT_EMAIL"
 

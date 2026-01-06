@@ -1,8 +1,8 @@
 #!/bin/bash
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "${SCRIPT_DIR}/common.sh"
-source "${SCRIPT_DIR}/docker_ops.sh"
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${LIB_DIR}/common.sh"
+source "${LIB_DIR}/docker_ops.sh"
 
 VHOST_CONFIGS_DIR="vhost-configs"
 
