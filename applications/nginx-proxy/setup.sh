@@ -3,11 +3,66 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+DEFAULT_CUSTOM_NGINX_CONF='client_max_body_size 100M;
+
+proxy_buffer_size 128k;
+proxy_buffers 4 256k;
+proxy_busy_buffers_size 256k;
+
+proxy_connect_timeout 600s;
+proxy_send_timeout 600s;
+proxy_read_timeout 600s;
+'
 
 echo "╔══════════════════════════════════════════════════════════════╗"
 echo "║  SETUP NGINX-PROXY - Configurazione Flessibile della Rete  ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
+
+ensure_custom_nginx_conf() {
+    local conf_file="$SCRIPT_DIR/custom-nginx.conf"
+    
+    if [[ -d "$conf_file" ]]; then
+        echo "⚠️  custom-nginx.conf è una directory (errore). Rimozione..."
+        rm -rf "$conf_file"
+    fi
+    
+    if [[ ! -f "$conf_file" ]]; then
+        echo "📝 Creazione custom-nginx.conf con configurazione di default..."
+        echo "$DEFAULT_CUSTOM_NGINX_CONF" > "$conf_file"
+        echo "✅ custom-nginx.conf creato"
+    fi
+}
+
+wait_for_healthy() {
+    local container=$1
+    local max_attempts=${2:-30}
+    local attempt=1
+    
+    echo "⏳ Attesa che $container sia healthy..."
+    
+    while [[ $attempt -le $max_attempts ]]; do
+        local health=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "unknown")
+        
+        if [[ "$health" == "healthy" ]]; then
+            echo "✅ $container è healthy"
+            return 0
+        fi
+        
+        if [[ "$health" == "unhealthy" ]]; then
+            echo "❌ $container è unhealthy"
+            return 1
+        fi
+        
+        sleep 2
+        ((attempt++))
+    done
+    
+    echo "⚠️  Timeout attesa healthcheck per $container"
+    return 1
+}
 
 if [[ ! -f ".env" ]]; then
     echo "⚠️  File .env non trovato. Creazione da .env.example..."
@@ -85,6 +140,8 @@ else
     fi
 fi
 
+ensure_custom_nginx_conf
+
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
 echo "  AVVIO NGINX-PROXY"
@@ -99,24 +156,25 @@ if [[ "$REPLY" =~ ^[Nn]$ ]]; then
     exit 0
 fi
 
-echo "[1/4] Arresto container precedenti..."
+echo "[1/3] Arresto container precedenti..."
 docker compose down 2>/dev/null || true
 sleep 2
 
-echo "[2/4] Avvio nginx-proxy..."
-docker compose up -d nginx-proxy
-sleep 5
+echo "[2/3] Avvio servizi con rete esterna '$NETWORK'..."
+docker compose -f docker-compose.yml -f docker-compose.external-network.yml up -d
 
-echo "[3/4] Collegamento nginx-proxy alla rete '$NETWORK'..."
-docker network connect "$NETWORK" nginx-proxy 2>/dev/null || true
-sleep 2
+echo "[3/3] Verifica stato..."
 
-echo "[4/4] Avvio acme-companion..."
-docker compose up -d acme-companion
+if ! wait_for_healthy "nginx-proxy"; then
+    echo ""
+    echo "❌ nginx-proxy non è partito correttamente"
+    echo ""
+    echo "Diagnostica:"
+    docker logs nginx-proxy --tail 30
+    exit 1
+fi
+
 sleep 3
-docker network connect "$NETWORK" nginx-proxy-acme 2>/dev/null || true
-
-sleep 2
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
@@ -169,4 +227,3 @@ else
     echo ""
     exit 1
 fi
-

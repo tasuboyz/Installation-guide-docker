@@ -1,0 +1,14 @@
+services:
+  nginx-proxy:
+    networks:
+      - external-net
+
+  acme-companion:
+    networks:
+      - external-net
+
+networks:
+  external-net:
+    external: true
+    name: ${DOCKER_NETWORK}
+
