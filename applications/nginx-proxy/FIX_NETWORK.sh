@@ -22,7 +22,7 @@ NETWORK="${DOCKER_NETWORK:-n8n-net}"
 echo "📌 Rete rilevata: $NETWORK"
 echo ""
 
-if ! docker network ls | grep -q "^${NETWORK}"; then
+if ! docker network ls --format "table {{.Name}}" | grep -q "^${NETWORK}$"; then
     echo "❌ ERRORE: Rete '$NETWORK' non esiste"
     echo "   Reti disponibili:"
     docker network ls
