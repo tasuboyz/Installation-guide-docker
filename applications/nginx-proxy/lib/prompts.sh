@@ -9,16 +9,16 @@ prompt_network_selection() {
     local auto_detected="${2:-}"
     local default_network="${3:-glpi-net}"
     
-    echo "Reti Docker esistenti:"
-    list_docker_networks
-    echo ""
+    echo "Reti Docker esistenti:" >&2
+    list_docker_networks >&2
+    echo "" >&2
     
     if [[ -n "$auto_detected" ]]; then
-        echo "Rete rilevata automaticamente: ${auto_detected}"
+        echo "Rete rilevata automaticamente: ${auto_detected}" >&2
     fi
     
     if [[ -n "$current_network" ]]; then
-        echo "Rete attuale da .env: ${current_network}"
+        echo "Rete attuale da .env: ${current_network}" >&2
         read -p "Usare questa rete? [Y/n]: " use_net
         use_net=${use_net:-y}
         if confirm_yes "$use_net"; then
@@ -45,7 +45,7 @@ prompt_email() {
     local current_email="${1:-}"
     
     if [[ -n "$current_email" ]]; then
-        echo "Email attuale: ${current_email}"
+        echo "Email attuale: ${current_email}" >&2
         read -p "Usare questa email? [Y/n]: " use_email
         use_email=${use_email:-y}
         if confirm_yes "$use_email"; then
@@ -59,9 +59,9 @@ prompt_email() {
 }
 
 prompt_ssl_mode() {
-    echo "  1. PRODUZIONE - certificati validi (limite: 5/settimana per dominio)"
-    echo "  2. STAGING    - certificati test illimitati, per debug"
-    echo ""
+    echo "  1. PRODUZIONE - certificati validi (limite: 5/settimana per dominio)" >&2
+    echo "  2. STAGING    - certificati test illimitati, per debug" >&2
+    echo "" >&2
     read -p "Scegli [1/2, default: 1]: " ssl_choice
     ssl_choice=${ssl_choice:-1}
     
