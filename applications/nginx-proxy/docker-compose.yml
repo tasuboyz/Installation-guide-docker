@@ -16,7 +16,6 @@ services:
       - "com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy=true"
     networks:
       - proxy-network
-      - ${DOCKER_NETWORK}
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -42,7 +41,6 @@ services:
       - nginx-proxy
     networks:
       - proxy-network
-      - ${DOCKER_NETWORK}
     restart: unless-stopped
     logging:
       driver: "json-file"
@@ -53,8 +51,6 @@ services:
 networks:
   proxy-network:
     driver: bridge
-  ${DOCKER_NETWORK}:
-    external: true
 
 volumes:
   nginx-certs:
