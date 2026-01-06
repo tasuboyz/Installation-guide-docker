@@ -5,233 +5,205 @@ Setup COMPLETAMENTE AUTOMATIZZATO di nginx-proxy con certificati SSL Let's Encry
 ## Quick Start
 
 ```bash
-chmod +x install.sh
+chmod +x install.sh add-service.sh
 sudo ./install.sh
 ```
 
-**Lo script fa TUTTO automaticamente:**
-1. Configura rete Docker
-2. Configura email Let's Encrypt
-3. Avvia nginx-proxy + acme-companion
-4. Chiede quale container esporre
-5. Chiede il sottodominio
-6. Rileva la porta automaticamente
-7. **Riconfigura il container** con le variabili SSL
-8. **Il servizio è raggiungibile via HTTPS in 1-2 minuti**
+## Wizard Interattivo
 
-**NESSUN INTERVENTO MANUALE RICHIESTO** — niente modifiche a docker-compose, niente comandi extra, niente configurazioni manuali.
+Il sistema include un wizard che scansiona automaticamente tutti i container, mostra le porte e ti permette di assegnare sottodomini in modo rapido.
 
-## Esempio Completo
+### Configurazione Singola
 
 ```bash
-sudo ./install.sh
+sudo ./add-service.sh
+```
 
-# ╔═══════════════════════════════════════════════════════════════╗
-# ║     NGINX REVERSE PROXY + SSL AUTOMATICO                      ║
-# ╚═══════════════════════════════════════════════════════════════╝
+Output:
 
-# STEP 1/8 - Rete Docker
-# Nome rete Docker [default: glpi-net]: n8n-net ↵
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SCANSIONE CONTAINER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-# STEP 2/8 - Email Let's Encrypt
-# Email per Let's Encrypt: admin@example.com ↵
+┌─────┬──────────────────────────────┬────────────────┬─────────────────┐
+│  #  │ Container                    │ Immagine       │ Porte           │
+├─────┼──────────────────────────────┼────────────────┼─────────────────┤
+│   1 │ n8n                          │ n8n            │ 5678            │
+│   2 │ chatwoot_rails               │ chatwoot       │ 3000            │
+│   3 │ portainer                    │ portainer      │ 9443            │
+│   4 │ grafana                      │ grafana        │ 3000            │
+└─────┴──────────────────────────────┴────────────────┴─────────────────┘
 
-# STEP 3/8 - Modalità SSL
-#   1) PRODUZIONE - certificati validi
-#   2) STAGING    - certificati test
-# Scegli [1/2, default: 1]: 1 ↵
+Seleziona container [1-4]: 1
+Porta auto-selezionata: 5678
+[✓] Selezionato: n8n (porta 5678)
 
-# STEP 4/8 - Avvio Nginx Proxy
-# [✓] nginx-proxy attivo
-# [✓] acme-companion attivo
+Sottodominio: n8n.miodominio.com
 
-# STEP 5/8 - Seleziona Container da Esporre
-# Container disponibili:
-#    1) n8n                       [n8n] ports: 5678
-#    2) chatwoot_rails_1          [chatwoot] ports: 3000
-# Seleziona [1-2]: 1 ↵
+Procedo con la configurazione? [Y/n]: y
 
-# STEP 6/8 - Sottodominio
-# Sottodominio: n8n.miodominio.com ↵
-# [✓] DNS: 207.154.252.110
+Configurazione in corso...
+[✓] Configurazione completata!
 
-# STEP 7/8 - Porta Interna
-# Porta rilevata: 5678
-# Usare questa porta? [Y/n]: ↵
+https://n8n.miodominio.com
 
-# STEP 8/8 - Applicazione Automatica
-# Procedo con la configurazione automatica? [Y/n]: ↵
-#
-#   → Connessione a rete n8n-net...
-#   → Ricreazione container con configurazione SSL...
-#
-# ╔═══════════════════════════════════════════════════════════════╗
-# ║               CONFIGURAZIONE COMPLETATA CON SUCCESSO          ║
-# ╚═══════════════════════════════════════════════════════════════╝
-#
-# Il servizio n8n è ora configurato per:
-#   https://n8n.miodominio.com
-#
-# Il certificato verrà emesso automaticamente in 1-2 minuti.
+Configurare un altro servizio? [Y/n]: y
+```
+
+### Configurazione Batch (Più Servizi)
+
+```bash
+sudo ./add-service.sh --batch --base example.com
+```
+
+Output:
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  CONFIGURAZIONE BATCH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Dominio base (es: example.com): miodominio.com
+
+┌─────┬──────────────────────────────┬────────────────┬─────────────────┐
+│  #  │ Container                    │ Immagine       │ Porte           │
+├─────┼──────────────────────────────┼────────────────┼─────────────────┤
+│   1 │ n8n                          │ n8n            │ 5678            │
+│   2 │ chatwoot_rails               │ chatwoot       │ 3000            │
+│   3 │ portainer                    │ portainer      │ 9443            │
+└─────┴──────────────────────────────┴────────────────┴─────────────────┘
+
+Container da configurare: 1 2 3
+
+Container: n8n (porta: 5678)
+Sottodominio [n8n.miodominio.com]: ↵
+
+Container: chatwoot_rails (porta: 3000)
+Sottodominio [chatwoot-rails.miodominio.com]: chat.miodominio.com
+
+Container: portainer (porta: 9443)
+Sottodominio [portainer.miodominio.com]: ↵
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  RIEPILOGO CONFIGURAZIONE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+┌──────────────────────────────┬────────────────────────────────┬───────┐
+│ Container                    │ Sottodominio                   │ Porta │
+├──────────────────────────────┼────────────────────────────────┼───────┤
+│ n8n                          │ n8n.miodominio.com             │  5678 │
+│ chatwoot_rails               │ chat.miodominio.com            │  3000 │
+│ portainer                    │ portainer.miodominio.com       │  9443 │
+└──────────────────────────────┴────────────────────────────────┴───────┘
+
+Procedere con la configurazione? [Y/n]: y
+
+Applicazione configurazioni...
+
+[✓] OK: https://n8n.miodominio.com
+[✓] OK: https://chat.miodominio.com
+[✓] OK: https://portainer.miodominio.com
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  RIEPILOGO
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+  Configurati: 3
+```
+
+## Automazione CLI
+
+Per script e CI/CD:
+
+```bash
+# Setup proxy
+sudo ./install.sh --network mynet --email admin@example.com --yes
+
+# Aggiunta servizio
+sudo ./add-service.sh -c n8n -d n8n.example.com -p 5678 -y
+
+# Lista servizi
+sudo ./add-service.sh --list
+```
+
+## Architettura
+
+```
+nginx-proxy/
+├── install.sh              # Setup proxy
+├── add-service.sh          # Wizard configurazione servizi
+├── lib/
+│   ├── common.sh           # Funzioni base
+│   ├── docker_ops.sh       # Operazioni Docker
+│   ├── ssl_config.sh       # Configurazione SSL
+│   ├── vhost_manager.sh    # Gestione nginx vhost
+│   ├── container_setup.sh  # Ricreazione container
+│   └── prompts.sh          # UI interattiva e wizard
 ```
 
 ## Come Funziona
 
-Lo script:
-- **Non tocca i docker-compose** dei tuoi servizi
-- **Ricrea automaticamente** il container selezionato preservando:
-  - Immagine Docker
-  - Volumi (bind mounts e named volumes)
-  - Environment variables
-  - Command ed entrypoint
-- **Aggiunge** le variabili necessarie per nginx-proxy:
-  - `VIRTUAL_HOST=tuo.dominio.com`
-  - `VIRTUAL_PORT=5678`
-  - `LETSENCRYPT_HOST=tuo.dominio.com`
-  - `LETSENCRYPT_EMAIL=tua@email.com`
-- **acme-companion** rileva automaticamente il container e richiede il certificato SSL
-- **Tutto persiste** tramite volumi Docker (riavvii, aggiornamenti, ecc.)
+1. **Scansione automatica** - Rileva tutti i container Docker attivi
+2. **Rilevamento porte** - Mostra le porte esposte da ogni container
+3. **Suggerimento sottodominio** - Propone automaticamente `container.tuodominio.com`
+4. **Configurazione automatica** - Ricrea il container con le variabili SSL necessarie
+5. **Certificato automatico** - acme-companion richiede il certificato Let's Encrypt
+
+## Servizi Speciali
+
+Il wizard rileva automaticamente servizi che richiedono configurazione speciale:
+
+- **Portainer (HTTPS backend)** - Proxy SSL automatico
+- **WebSocket apps** - Headers upgrade configurati
 
 ## Staging vs Produzione
 
 | Modalità | Certificati | Limite | Browser |
 |----------|-------------|--------|---------|
-| **Produzione** | Validi | 5/settimana per dominio | ✓ Fidati |
-| **Staging** | Test | Illimitati | ✗ Non fidati |
-
-**Consiglio:** usa staging per test, poi produzione quando tutto funziona.
-
-## Configurare Altri Servizi
-
-Riesegui lo script:
-```bash
-sudo ./install.sh
-```
-
-Lo script riconosce che il proxy è già attivo e ti chiede direttamente quale altro servizio configurare.
+| **Produzione** | Validi | 5/settimana per dominio | Fidati |
+| **Staging** | Test | Illimitati | Non fidati |
 
 ## Monitoraggio
 
 ```bash
-# Log certificati (in tempo reale)
+# Log certificati
 docker logs -f nginx-proxy-acme
 
-# Cerca certificato specifico
-docker logs nginx-proxy-acme 2>&1 | grep 'n8n.miodominio.com'
-
-# Test HTTPS (dopo 1-2 minuti)
+# Test HTTPS
 curl -I https://n8n.miodominio.com
+
+# Lista servizi configurati
+sudo ./add-service.sh --list
 ```
 
 ## Troubleshooting
 
-### Certificato non emesso dopo 5 minuti
+### Certificato non emesso
 
 ```bash
-# Controlla log per errori
 docker logs nginx-proxy-acme
-
-# Verifica DNS
 dig +short n8n.miodominio.com
-
-# Verifica che il container abbia le env corrette
-docker inspect n8n | grep -A5 Env
 ```
 
 ### Servizio non raggiungibile
 
 ```bash
-# Verifica nginx
 docker logs nginx-proxy
-
-# Test config nginx
 docker exec nginx-proxy nginx -t
-
-# Verifica rete
-docker network inspect n8n-net
 ```
 
-### Ripartire da zero
+### Reset completo
 
 ```bash
-# Ferma tutto
 docker compose down
-
-# Rimuovi volumi (ATTENZIONE: perdi certificati)
 docker volume rm nginx-certs nginx-vhost nginx-html acme-state
-
-# Riavvia
 sudo ./install.sh
 ```
-
-## Nuovi Script Helper 🆕
-
-Dopo il setup iniziale, usa questi script per gestione rapida:
-
-```bash
-# ⭐ QUICK START - Setup automatico completo
-./setup-domains.sh
-
-# 🔍 Leggi URL configurati
-./list-configured-urls.sh
-
-# 📊 Diagnostica completa stato sistema
-./diagnose.sh
-```
-
-## Struttura File
-
-```
-nginx-proxy/
-├── docker-compose.yml           # nginx-proxy + acme-companion
-├── custom-nginx.conf            # Configurazione globale nginx
-├── .env                         # Generato automaticamente
-├── .env.domains                 # Generato da setup-domains.sh
-│
-├── install.sh                   # ⭐ SCRIPT PRINCIPALE (step-by-step)
-├── setup-domains.sh             # ⭐ QUICK HELPER (automatico)
-├── list-configured-urls.sh      # 🔍 Visualizza URL salvati
-├── diagnose.sh                  # 📊 Diagnostica completa
-│
-├── configs/                     # Backup configurazioni servizi (auto)
-│   ├── retell-backend.conf
-│   ├── portainer.conf
-│   └── ...
-│
-├── vhost-configs/               # Configurazioni vhost nginx (auto)
-│   └── ...
-│
-├── README.md                    # Questo file
-├── QUICK_START.md               # ⚡ Quick reference (5 min setup)
-└── CHEATSHEET.md                # 📝 Comandi frequenti
-```
-
-## Caratteristiche
-
-- ✅ **Zero configurazione manuale** — tutto automatico
-- ✅ **Preserva configurazione** container esistenti
-- ✅ **Auto-rileva porte** esposte
-- ✅ **Verifica DNS** prima di procedere
-- ✅ **Certificati automatici** via Let's Encrypt
-- ✅ **Rinnovo automatico** certificati (acme-companion)
-- ✅ **WebSocket ready** per app real-time
-- ✅ **Persistenza** via volumi Docker
-- ✅ **Rieseguibile** per configurare più servizi
-- ✅ **Staging mode** per test senza rate limit
 
 ## Requisiti
 
 - Docker e Docker Compose
 - Porta 80 e 443 aperte
-- DNS configurato e puntato al server
+- DNS configurato
 - Permessi root (sudo)
-
-## Supporto
-
-Logs utili:
-```bash
-docker logs nginx-proxy          # Proxy logs
-docker logs nginx-proxy-acme     # Certificate logs
-docker ps                        # Containers attivi
-docker network ls                # Reti disponibili
-```
