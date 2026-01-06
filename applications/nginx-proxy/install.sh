@@ -244,6 +244,35 @@ else
     exit 1
 fi
 
+# Verifica che nginx-proxy risponda effettivamente
+echo "  → Verifica nginx-proxy risponde su porta 80..."
+sleep 2
+for i in {1..10}; do
+    if docker exec nginx-proxy curl -sf http://localhost:80 >/dev/null 2>&1; then
+        print_status "nginx-proxy risponde correttamente"
+        break
+    fi
+    if [[ $i -eq 10 ]]; then
+        print_error "nginx-proxy non risponde - verifica logs"
+        docker logs nginx-proxy --tail 30
+        exit 1
+    fi
+    sleep 1
+done
+
+# Check e apertura automatica firewall per porta 80/443
+if command -v ufw &> /dev/null; then
+    echo "  → Verifica firewall..."
+    if ! ufw status | grep -q "80.*ALLOW"; then
+        print_warning "Porta 80 non aperta nel firewall"
+        ufw allow 80/tcp >/dev/null 2>&1 && print_status "Porta 80 aperta automaticamente"
+    fi
+    if ! ufw status | grep -q "443.*ALLOW"; then
+        print_warning "Porta 443 non aperta nel firewall"
+        ufw allow 443/tcp >/dev/null 2>&1 && print_status "Porta 443 aperta automaticamente"
+    fi
+fi
+
 # =============================================================================
 # STEP 5: SELEZIONE CONTAINER
 # =============================================================================
@@ -394,10 +423,25 @@ echo "Configurazione in corso..."
 
 # Connetti container alla rete se necessario
 CNETS=$(docker inspect "$CONTAINER_NAME" --format='{{range $n,$v := .NetworkSettings.Networks}}{{$n}} {{end}}' 2>/dev/null)
+
+# Connetti a DOCKER_NETWORK (rete principale dove stanno gli altri servizi)
 if [[ ! "$CNETS" =~ $DOCKER_NETWORK ]]; then
     echo "  → Connessione a rete ${DOCKER_NETWORK}..."
     docker network connect "$DOCKER_NETWORK" "$CONTAINER_NAME" 2>/dev/null || true
-    print_status "Container connesso alla rete"
+    print_status "Container connesso alla rete ${DOCKER_NETWORK}"
+fi
+
+# Connetti anche alla rete proxy-network (rete interna di nginx-proxy)
+PROXY_NET="nginx-proxy_proxy-network"
+if ! docker network ls --format '{{.Name}}' | grep -q "^${PROXY_NET}$"; then
+    # Se non esiste, prova senza prefisso
+    PROXY_NET="proxy-network"
+fi
+
+if [[ ! "$CNETS" =~ $PROXY_NET ]]; then
+    echo "  → Connessione a rete nginx ${PROXY_NET}..."
+    docker network connect "$PROXY_NET" "$CONTAINER_NAME" 2>/dev/null || true
+    print_status "Container connesso alla rete nginx"
 fi
 
 # Salva configurazione locale
