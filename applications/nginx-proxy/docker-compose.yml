@@ -10,7 +10,6 @@ services:
       - nginx-certs:/etc/nginx/certs
       - nginx-vhost:/etc/nginx/vhost.d
       - nginx-html:/usr/share/nginx/html
-      - ./vhost-configs:/etc/nginx/vhost.d:rw
     environment:
       - TRUST_DOWNSTREAM_PROXY=false
     labels:
