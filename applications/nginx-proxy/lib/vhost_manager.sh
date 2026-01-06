@@ -19,6 +19,7 @@ create_standard_vhost_config() {
     config+="proxy_set_header X-Real-IP \$remote_addr;\n"
     config+="proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\n"
     config+="proxy_set_header X-Forwarded-Proto \$scheme;\n"
+    config+="proxy_pass_request_headers on;\n"
     
     echo -e "$config"
 }
@@ -46,6 +47,15 @@ create_websocket_config() {
     echo -e "$config"
 }
 
+create_api_config() {
+    local config=""
+    
+    config+="proxy_set_header Authorization \$http_authorization;\n"
+    config+="proxy_pass_header Authorization;\n"
+    
+    echo -e "$config"
+}
+
 detect_special_service() {
     local image="$1"
     local port="$2"
@@ -57,6 +67,11 @@ detect_special_service() {
     
     if [[ "$image" =~ n8n|websocket|socket\.io ]]; then
         echo "websocket"
+        return 0
+    fi
+    
+    if [[ "$image" =~ chatwoot ]]; then
+        echo "api"
         return 0
     fi
     
@@ -80,6 +95,10 @@ create_vhost_config() {
         websocket)
             config=$(create_standard_vhost_config "$subdomain")
             config+=$(create_websocket_config)
+            ;;
+        api)
+            config=$(create_standard_vhost_config "$subdomain")
+            config+=$(create_api_config)
             ;;
         *)
             config=$(create_standard_vhost_config "$subdomain")
