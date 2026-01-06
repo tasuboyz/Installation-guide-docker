@@ -106,8 +106,12 @@ sleep 2
 echo "[2/3] Avvio container..."
 docker compose up -d
 
-echo "[3/3] Attesa boot container..."
-sleep 8
+echo "[3/3] Collegamento rete '$NETWORK'..."
+sleep 3
+docker network connect "$NETWORK" nginx-proxy 2>/dev/null || true
+docker network connect "$NETWORK" nginx-proxy-acme 2>/dev/null || true
+
+sleep 2
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
