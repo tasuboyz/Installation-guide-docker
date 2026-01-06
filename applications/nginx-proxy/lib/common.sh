@@ -51,40 +51,7 @@ validate_email() {
 
 validate_domain() {
     local domain="$1"
-    
-    if [[ -z "$domain" ]]; then
-        return 1
-    fi
-    
-    if [[ "$domain" == .* ]] || [[ "$domain" == *. ]]; then
-        return 1
-    fi
-    
-    if [[ "$domain" == *..* ]]; then
-        return 1
-    fi
-    
-    local parts
-    IFS='.' read -ra parts <<< "$domain"
-    if [[ ${#parts[@]} -lt 2 ]]; then
-        return 1
-    fi
-    
-    local tld="${parts[-1]}"
-    if [[ ! "$tld" =~ ^[a-zA-Z]{2,}$ ]]; then
-        return 1
-    fi
-    
-    local first_part="${parts[0]}"
-    if [[ ! "$first_part" =~ ^[a-zA-Z0-9] ]]; then
-        return 1
-    fi
-    
-    if [[ "$domain" =~ ^[a-zA-Z0-9] ]] && [[ "$domain" =~ \.[a-zA-Z]{2,}$ ]]; then
-        return 0
-    fi
-    
-    return 1
+    [[ -n "$domain" ]]
 }
 
 check_root() {
