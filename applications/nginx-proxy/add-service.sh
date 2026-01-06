@@ -71,7 +71,25 @@ check_proxy_running() {
 load_proxy_config() {
     load_env_file ".env"
     
-    NETWORK="${DOCKER_NETWORK:-glpi-net}"
+    local env_network="${DOCKER_NETWORK:-}"
+    local proxy_network=""
+    if is_container_running "nginx-proxy"; then
+        proxy_network=$(get_primary_user_network_of_container "nginx-proxy" 2>/dev/null || echo "")
+    fi
+
+    if [[ -n "$proxy_network" ]]; then
+        if [[ -n "$env_network" ]] && [[ "$env_network" != "$proxy_network" ]]; then
+            print_warning "Rete .env (${env_network}) diversa dalla rete reale di nginx-proxy (${proxy_network})"
+        fi
+        NETWORK="$proxy_network"
+    else
+        NETWORK="${env_network:-glpi-net}"
+    fi
+
+    if ! network_exists "$NETWORK"; then
+        print_error "Rete Docker non trovata: ${NETWORK}"
+        exit_user_error
+    fi
     EMAIL="${LETSENCRYPT_EMAIL:-}"
     SSL_MODE="PRODUZIONE"
     IS_STAGING=false

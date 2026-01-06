@@ -165,7 +165,20 @@ configure_service_for_proxy() {
     local network="$5"
     local auto_confirm="${6:-false}"
     
-    connect_container_to_network "$container_name" "$network"
+    if ! ensure_container_connected_to_network "nginx-proxy" "$network"; then
+        print_error "Impossibile connettere nginx-proxy alla rete '${network}'"
+        return 1
+    fi
+
+    if ! ensure_container_connected_to_network "$container_name" "$network"; then
+        print_error "Impossibile connettere '${container_name}' alla rete '${network}'"
+        return 1
+    fi
+
+    if ! test_tcp_reachability_on_network "$network" "$container_name" "$port" 15; then
+        print_error "Servizio non raggiungibile sulla rete '${network}': ${container_name}:${port}"
+        return 1
+    fi
     
     local image
     image=$(get_container_image "$container_name")

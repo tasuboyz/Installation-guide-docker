@@ -76,6 +76,72 @@ get_container_networks() {
     docker inspect "$container_name" --format='{{range $n,$v := .NetworkSettings.Networks}}{{$n}} {{end}}' 2>/dev/null | xargs
 }
 
+is_default_network() {
+    local network_name="$1"
+    [[ "$network_name" =~ ^(bridge|host|none)$ ]]
+}
+
+get_primary_user_network_of_container() {
+    local container_name="$1"
+    local nets
+    nets=$(get_container_networks "$container_name" 2>/dev/null || echo "")
+    [[ -z "$nets" ]] && return 1
+
+    local preferred=""
+    local first=""
+    local net
+    for net in $nets; do
+        is_default_network "$net" && continue
+        [[ -z "$first" ]] && first="$net"
+        if [[ "$net" =~ proxy|nginx ]]; then
+            preferred="$net"
+            break
+        fi
+    done
+
+    echo "${preferred:-$first}"
+}
+
+ensure_container_connected_to_network() {
+    local container_name="$1"
+    local network_name="$2"
+
+    local current_networks
+    current_networks=$(get_container_networks "$container_name" 2>/dev/null || echo "")
+    if [[ " ${current_networks} " =~ " ${network_name} " ]]; then
+        return 0
+    fi
+
+    if ! docker network connect "$network_name" "$container_name" >/dev/null 2>&1; then
+        return 1
+    fi
+
+    current_networks=$(get_container_networks "$container_name" 2>/dev/null || echo "")
+    [[ " ${current_networks} " =~ " ${network_name} " ]]
+}
+
+test_tcp_reachability_on_network() {
+    local network_name="$1"
+    local host="$2"
+    local port="$3"
+    local timeout="${4:-15}"
+
+    local i
+    for ((i=1; i<=timeout; i++)); do
+        set +e
+        docker run --rm --network "$network_name" busybox:1.36 sh -c "nc -z -w 2 $(sh_quote "$host") $(sh_quote "$port")" >/dev/null 2>&1
+        local rc=$?
+        set -e
+
+        if [[ $rc -eq 0 ]]; then
+            return 0
+        fi
+        sleep 1
+    done
+
+    return 1
+}
+
 get_container_cmd() {
     local container_name="$1"
     docker inspect "$container_name" --format='{{range .Config.Cmd}}{{.}} {{end}}' 2>/dev/null | \
@@ -148,11 +214,14 @@ connect_container_to_network() {
     local current_networks
     current_networks=$(get_container_networks "$container_name")
     
-    if [[ ! "$current_networks" =~ $network_name ]]; then
-        docker network connect "$network_name" "$container_name" 2>/dev/null || true
+    if [[ " ${current_networks} " =~ " ${network_name} " ]]; then
+        return 1
+    fi
+
+    if ensure_container_connected_to_network "$container_name" "$network_name"; then
         return 0
     fi
-    return 1
+    return 2
 }
 
 list_containers_for_proxy() {
