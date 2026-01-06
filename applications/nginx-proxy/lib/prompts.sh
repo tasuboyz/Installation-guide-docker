@@ -80,6 +80,7 @@ scan_all_containers() {
         return 1
     fi
     
+    unset CONTAINER_MAP CONTAINER_PORTS CONTAINER_IMAGES CONTAINER_LIST
     declare -gA CONTAINER_MAP
     declare -gA CONTAINER_PORTS
     declare -gA CONTAINER_IMAGES
@@ -87,6 +88,9 @@ scan_all_containers() {
     
     local i=1
     while IFS= read -r c; do
+        [[ -z "$c" ]] && continue
+        [[ -n "${CONTAINER_PORTS[$c]:-}" ]] && continue
+        
         local info
         info=$(get_container_info "$c")
         local img="${info%|*}"
