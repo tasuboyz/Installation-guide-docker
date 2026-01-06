@@ -99,16 +99,21 @@ if [[ "$REPLY" =~ ^[Nn]$ ]]; then
     exit 0
 fi
 
-echo "[1/3] Arresto container precedenti..."
+echo "[1/4] Arresto container precedenti..."
 docker compose down 2>/dev/null || true
 sleep 2
 
-echo "[2/3] Avvio container..."
-docker compose up -d
+echo "[2/4] Avvio nginx-proxy..."
+docker compose up -d nginx-proxy
+sleep 5
 
-echo "[3/3] Collegamento rete '$NETWORK'..."
-sleep 3
+echo "[3/4] Collegamento nginx-proxy alla rete '$NETWORK'..."
 docker network connect "$NETWORK" nginx-proxy 2>/dev/null || true
+sleep 2
+
+echo "[4/4] Avvio acme-companion..."
+docker compose up -d acme-companion
+sleep 3
 docker network connect "$NETWORK" nginx-proxy-acme 2>/dev/null || true
 
 sleep 2
