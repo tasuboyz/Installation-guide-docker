@@ -51,7 +51,10 @@ validate_email() {
 
 validate_domain() {
     local domain="$1"
-    [[ -n "$domain" ]]
+    [[ -n "$domain" ]] || return 1
+    [[ "$domain" =~ ^[[:space:]]*$ ]] && return 1
+    [[ "$domain" =~ [[:space:]] ]] && return 1
+    [[ "$domain" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$ ]]
 }
 
 check_root() {

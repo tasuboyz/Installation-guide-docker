@@ -180,6 +180,7 @@ wizard_get_subdomain() {
         read -p "Sottodominio: " subdomain
     fi
     
+    subdomain=$(echo "$subdomain" | tr -d '\r' | xargs)
     echo "$subdomain"
 }
 
