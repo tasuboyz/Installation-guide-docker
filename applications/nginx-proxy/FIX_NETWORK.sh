@@ -2,10 +2,8 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
 echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║  FIX NETWORK - Collegamento nginx-proxy agli altri servizi   ║"
+echo "║  FIX NETWORK SEMPLIFICATO - Collegamento reti Docker         ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -30,10 +28,9 @@ if ! docker network inspect "$NETWORK" >/dev/null 2>&1; then
 fi
 
 echo "🔧 Operazioni:"
-echo "  1. Fermarsi container nginx-proxy e acme-companion"
-echo "  2. Aggiornamento configurazione docker-compose.yml"
-echo "  3. Connessione di nginx-proxy alla rete '$NETWORK'"
-echo "  4. Riavvio container"
+echo "  1. Fermarsi container nginx-proxy"
+echo "  2. Connessione container nginx-proxy alla rete '$NETWORK'"
+echo "  3. Riavvio container"
 echo ""
 
 read -p "Procedere? [Y/n]: " -r
@@ -44,98 +41,21 @@ if [[ "$REPLY" =~ ^[Nn]$ ]]; then
     exit 0
 fi
 
-echo "[1/4] Fermata container..."
+echo "[1/3] Fermata container..."
 docker compose down 2>/dev/null || true
-sleep 2
+sleep 3
 
-echo "[2/4] Aggiornamento docker-compose.yml..."
-
-BACKUP_FILE="docker-compose.yml.backup.$(date +%s)"
-cp docker-compose.yml "$BACKUP_FILE"
-echo "     Backup: $BACKUP_FILE"
-
-cat > docker-compose.yml << 'DOCKERCOMPOSE'
-services:
-  nginx-proxy:
-    image: nginxproxy/nginx-proxy:latest
-    container_name: nginx-proxy
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - /var/run/docker.sock:/tmp/docker.sock:ro
-      - nginx-certs:/etc/nginx/certs
-      - nginx-vhost:/etc/nginx/vhost.d
-      - nginx-html:/usr/share/nginx/html
-    environment:
-      - TRUST_DOWNSTREAM_PROXY=false
-    labels:
-      - "com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy=true"
-    networks:
-      - proxy-network
-      - external-network
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  acme-companion:
-    image: nginxproxy/acme-companion:latest
-    container_name: nginx-proxy-acme
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - nginx-certs:/etc/nginx/certs:rw
-      - nginx-vhost:/etc/nginx/vhost.d
-      - nginx-html:/usr/share/nginx/html
-      - acme-state:/etc/acme.sh
-    environment:
-      - DEFAULT_EMAIL=${LETSENCRYPT_EMAIL}
-      - NGINX_PROXY_CONTAINER=nginx-proxy
-      - NGINX_DOCKER_GEN_CONTAINER=nginx-proxy
-      - ACME_CA_URI=${ACME_CA_URI:-}
-    depends_on:
-      - nginx-proxy
-    networks:
-      - proxy-network
-      - external-network
-    restart: unless-stopped
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-networks:
-  proxy-network:
-    driver: bridge
-  external-network:
-    name: ${DOCKER_NETWORK}
-    external: true
-
-volumes:
-  nginx-certs:
-  nginx-vhost:
-  nginx-html:
-  acme-state:
-DOCKERCOMPOSE
-
-echo "     ✓ docker-compose.yml aggiornato"
-echo ""
-
-echo "[3/4] Connessione rete '$NETWORK'..."
-if docker network inspect "$NETWORK" >/dev/null 2>&1; then
-    echo "     ✓ Rete '$NETWORK' disponibile"
-else
-    echo "❌ ERRORE: Rete '$NETWORK' non trovata"
-    exit 1
-fi
-echo ""
-
-echo "[4/4] Riavvio container..."
+echo "[2/3] Aggiunta nginx-proxy alla rete '$NETWORK'..."
 docker compose up -d
 sleep 5
+
+echo "[3/3] Connessione della rete..."
+
+if docker network inspect "$NETWORK" | grep -q "nginx-proxy"; then
+    echo "     ✓ nginx-proxy già collegato a $NETWORK"
+else
+    docker network connect "$NETWORK" nginx-proxy 2>/dev/null || echo "     ℹ Container potrebbe non essere in esecuzione"
+fi
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════"
@@ -143,10 +63,14 @@ echo "  STATO"
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
 
+sleep 2
+
 if docker ps | grep -q "nginx-proxy.*Up"; then
     echo "✅ nginx-proxy: ONLINE"
+    NGINX_UP=1
 else
     echo "❌ nginx-proxy: OFFLINE"
+    NGINX_UP=0
 fi
 
 if docker ps | grep -q "nginx-proxy-acme.*Up"; then
@@ -156,14 +80,24 @@ else
 fi
 
 echo ""
+
+if [[ $NGINX_UP -eq 0 ]]; then
+    echo "⚠️  nginx-proxy non è online. Controllare i log:"
+    echo ""
+    echo "  docker logs nginx-proxy | tail -50"
+    echo ""
+    exit 1
+fi
+
+echo "✅ Connessione verificata!"
+echo ""
 echo "Test connettività:"
 echo ""
-echo "Per testare l'API di Chatwoot:"
+echo "  # Verificare che nginx-proxy è sulla rete corretta:"
+echo "  docker network inspect $NETWORK | grep nginx-proxy -A 5"
+echo ""
+echo "  # Testare l'API di Chatwoot:"
 echo "  curl --request GET \\"
 echo "    --url 'https://chatwoot.tasuthor.com/api/v1/accounts/1/contacts?page=1' \\"
 echo "    --header 'Authorization: Bearer bXY5ozTo3ArMtUZgbudtrqRA'"
 echo ""
-echo "Log di diagnostica:"
-echo "  docker logs -f nginx-proxy"
-echo ""
-
