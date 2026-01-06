@@ -1,213 +1,219 @@
 #!/bin/bash
-# =============================================================================
-# SCRIPT: Diagnostica Completa - Stato Servizi + Certificati
-# Uso: ./diagnose.sh
-# =============================================================================
 
 set -euo pipefail
 
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-BOLD='\033[1m'
-NC='\033[0m'
+echo "╔══════════════════════════════════════════════════════════════╗"
+echo "║         DIAGNOSTICA NGINX-PROXY + CHATWOOT                 ║"
+echo "╚══════════════════════════════════════════════════════════════╝"
+echo ""
 
-print_section() { 
-    echo ""
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD}  $1${NC}"
-    echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+ISSUES=0
+WARNINGS=0
+
+print_ok() {
+    echo "  ✅ $1"
 }
 
-check_status() {
-    if [[ $? -eq 0 ]]; then
-        echo -e "${GREEN}✓${NC} $1"
+print_error() {
+    echo "  ❌ $1"
+    ((ISSUES++))
+}
+
+print_warning() {
+    echo "  ⚠️  $1"
+    ((WARNINGS++))
+}
+
+print_info() {
+    echo "  ℹ️  $1"
+}
+
+# ============================================================================
+echo "1️⃣  CONTAINER STATUS"
+echo "─────────────────────────────────────────────────────────────────────"
+
+if docker ps | grep -q "nginx-proxy.*Up"; then
+    print_ok "nginx-proxy è ONLINE"
+else
+    print_error "nginx-proxy NON è in esecuzione"
+fi
+
+if docker ps | grep -q "nginx-proxy-acme.*Up"; then
+    print_ok "acme-companion è ONLINE"
+else
+    print_error "acme-companion NON è in esecuzione"
+fi
+
+if docker ps | grep -q "chatwoot-rails.*Up"; then
+    print_ok "chatwoot-rails è ONLINE"
+else
+    print_error "chatwoot-rails NON è in esecuzione"
+fi
+
+echo ""
+
+# ============================================================================
+echo "2️⃣  RETE DOCKER"
+echo "─────────────────────────────────────────────────────────────────────"
+
+if docker network inspect n8n-net >/dev/null 2>&1; then
+    print_ok "Rete 'n8n-net' trovata"
+    
+    if docker network inspect n8n-net | grep -q "nginx-proxy"; then
+        print_ok "nginx-proxy è collegato a 'n8n-net'"
     else
-        echo -e "${RED}✗${NC} $1"
+        print_error "nginx-proxy NON è collegato a 'n8n-net'"
     fi
-}
-
-# =============================================================================
-
-print_section "1. STATO DOCKER"
-
-echo ""
-echo "Docker daemon:"
-docker ps > /dev/null 2>&1
-check_status "Docker in esecuzione"
-
-echo ""
-echo "Docker Compose:"
-docker compose version | head -1 || echo -e "${RED}✗${NC} Docker Compose non disponibile"
-
-echo ""
-echo "Versioni:"
-docker --version
-docker compose version --short 2>/dev/null || echo "N/A"
-
-# =============================================================================
-
-print_section "2. RETI DOCKER"
-
-echo ""
-docker network ls --format "table {{.Name}}\t{{.Driver}}\t{{.Scope}}" | grep -E "glpi-net|proxy-network|app-network" || echo "Nessuna rete proxy trovata"
-
-# =============================================================================
-
-print_section "3. CONTAINER NGINX-PROXY"
-
-echo ""
-if docker ps --format '{{.Names}}' | grep -q "nginx-proxy$"; then
-    echo -e "${GREEN}✓${NC} nginx-proxy attivo"
-    docker ps --format "table {{.Names}}\t{{.Status}}" | grep nginx-proxy
-else
-    echo -e "${RED}✗${NC} nginx-proxy NON ATTIVO"
-fi
-
-echo ""
-if docker ps --format '{{.Names}}' | grep -q "nginx-proxy-acme"; then
-    echo -e "${GREEN}✓${NC} nginx-proxy-acme attivo"
-    docker ps --format "table {{.Names}}\t{{.Status}}" | grep nginx-proxy-acme
-else
-    echo -e "${RED}✗${NC} nginx-proxy-acme NON ATTIVO"
-fi
-
-# =============================================================================
-
-print_section "4. CONTAINER CON SSL CONFIGURATO"
-
-echo ""
-FOUND_ANY=false
-docker ps --format '{{.Names}}' | while read container; do
-    VHOST=$(docker inspect "$container" --format='{{range .Config.Env}}{{if contains . "VIRTUAL_HOST="}}{{.}}{{end}}{{end}}' 2>/dev/null || echo "")
     
-    if [[ -n "$VHOST" ]]; then
-        FOUND_ANY=true
-        VPORT=$(docker inspect "$container" --format='{{range .Config.Env}}{{if contains . "VIRTUAL_PORT="}}{{.}}{{end}}{{end}}' 2>/dev/null || echo "default")
-        STATUS=$(docker ps --format '{{.Status}}' --filter "name=$container" 2>/dev/null | head -1)
-        
-        printf "  %-25s ${GREEN}%s${NC}\n" "$container" "${VHOST#VIRTUAL_HOST=}"
-        printf "    └─ Port: ${VPORT#VIRTUAL_PORT=} | Status: $STATUS\n"
+    if docker network inspect n8n-net | grep -q "chatwoot-rails"; then
+        print_ok "chatwoot-rails è collegato a 'n8n-net'"
+    else
+        print_error "chatwoot-rails NON è collegato a 'n8n-net'"
     fi
-done
-
-if ! $FOUND_ANY; then
-    echo "Nessun container con VIRTUAL_HOST trovato"
+else
+    print_error "Rete 'n8n-net' NON trovata"
 fi
 
-# =============================================================================
+echo ""
 
-print_section "5. CERTIFICATI SSL EMESSI"
+# ============================================================================
+echo "3️⃣  CONNETTIVITÀ INTERNA"
+echo "─────────────────────────────────────────────────────────────────────"
+
+if docker ps | grep -q "nginx-proxy.*Up"; then
+    if docker exec nginx-proxy curl -sf http://chatwoot-rails-1:3000/ >/dev/null 2>&1; then
+        print_ok "nginx-proxy può raggiungere chatwoot-rails-1:3000"
+    else
+        print_error "nginx-proxy NON può raggiungere chatwoot-rails-1:3000"
+        print_info "Controllare: docker logs nginx-proxy"
+    fi
+fi
 
 echo ""
-if docker ps --format '{{.Names}}' | grep -q "nginx-proxy-acme"; then
-    CERTS_COUNT=$(docker exec nginx-proxy-acme ls -1 /etc/acme.sh/ 2>/dev/null | grep -v "^\." | wc -l || echo "0")
-    echo "Certificati Let's Encrypt emessi: $CERTS_COUNT"
-    echo ""
+
+# ============================================================================
+echo "4️⃣  CERTIFICATI SSL"
+echo "─────────────────────────────────────────────────────────────────────"
+
+if docker exec nginx-proxy test -f /etc/nginx/certs/chatwoot.tasuthor.com.crt 2>/dev/null; then
+    print_ok "Certificato SSL per chatwoot.tasuthor.com trovato"
     
-    docker exec nginx-proxy-acme ls -1 /etc/acme.sh/ 2>/dev/null | grep -v "^\." | while read domain; do
-        if [[ ! "$domain" =~ ^\.\.?$ ]]; then
-            # Controlla data di scadenza
-            CERT_FILE="/etc/acme.sh/${domain}/fullchain.pem"
-            if docker exec nginx-proxy-acme test -f "$CERT_FILE" 2>/dev/null; then
-                EXPIRY=$(docker exec nginx-proxy-acme openssl x509 -enddate -noout -in "$CERT_FILE" 2>/dev/null | cut -d= -f2 || echo "N/A")
-                printf "  %-40s ${GREEN}✓${NC} Scade: %s\n" "$domain" "$EXPIRY"
-            else
-                printf "  %-40s ${YELLOW}⏳${NC} In elaborazione...\n" "$domain"
-            fi
-        fi
-    done
+    EXPIRY=$(docker exec nginx-proxy openssl x509 -enddate -noout -in /etc/nginx/certs/chatwoot.tasuthor.com.crt 2>/dev/null | cut -d= -f2 || echo "N/A")
+    print_info "Scadenza: $EXPIRY"
 else
-    echo -e "${RED}✗${NC} nginx-proxy-acme non attivo - impossibile verificare certificati"
+    print_warning "Certificato SSL per chatwoot.tasuthor.com NON trovato"
+    print_info "Attendi 1-2 minuti che acme-companion emetta il certificato"
 fi
 
-# =============================================================================
+echo ""
 
-print_section "6. CONFIGURAZIONE DOMINI (.env.domains)"
+# ============================================================================
+echo "5️⃣  CONFIGURAZIONE NGINX"
+echo "─────────────────────────────────────────────────────────────────────"
+
+if docker exec nginx-proxy test -f /etc/nginx/vhost.d/chatwoot.tasuthor.com 2>/dev/null; then
+    print_ok "Vhost config per chatwoot.tasuthor.com trovato"
+    
+    VHOST_CONFIG=$(docker exec nginx-proxy cat /etc/nginx/vhost.d/chatwoot.tasuthor.com)
+    
+    if echo "$VHOST_CONFIG" | grep -q "proxy_pass_request_headers"; then
+        print_ok "proxy_pass_request_headers è configurato"
+    else
+        print_warning "proxy_pass_request_headers NON è configurato"
+    fi
+    
+    if echo "$VHOST_CONFIG" | grep -q "Authorization"; then
+        print_ok "Authorization header è configurato"
+    else
+        print_warning "Authorization header NON è configurato"
+    fi
+else
+    print_warning "Vhost config per chatwoot.tasuthor.com NON trovato"
+    print_info "Esegui: sudo ./add-service.sh"
+fi
 
 echo ""
-if [[ -f ".env.domains" ]]; then
-    echo "Configurazione trovata:"
+
+# ============================================================================
+echo "6️⃣  CONFIGURAZIONE CHATWOOT"
+echo "─────────────────────────────────────────────────────────────────────"
+
+# Leggi le configurazioni salvate
+if [[ -f "configs/chatwoot-rails.conf" ]]; then
+    source configs/chatwoot-rails.conf
+    print_ok "Configurazione salvata trovata"
+    print_info "Container: $CONTAINER"
+    print_info "Sottodominio: $SUBDOMAIN"
+    print_info "Porta: $PORT"
+else
+    print_warning "Configurazione salvata NON trovata"
+    print_info "Esegui: sudo ./add-service.sh"
+fi
+
+echo ""
+
+# ============================================================================
+echo "7️⃣  TEST SINTASSI NGINX"
+echo "─────────────────────────────────────────────────────────────────────"
+
+if docker exec nginx-proxy nginx -t 2>&1 | grep -q "successful"; then
+    print_ok "Configurazione nginx è valida"
+else
+    print_error "Configurazione nginx ha errori"
+    docker exec nginx-proxy nginx -t 2>&1 | head -20
+fi
+
+echo ""
+
+# ============================================================================
+echo "8️⃣  LOG DIAGNOSTICA"
+echo "─────────────────────────────────────────────────────────────────────"
+
+echo ""
+echo "📄 Ultimi 20 log nginx-proxy:"
+echo "─────────────────────────────────────────────────────────────────────"
+docker logs --tail 20 nginx-proxy 2>&1 | tail -20
+
+echo ""
+echo "📄 Ultimi 20 log acme-companion:"
+echo "─────────────────────────────────────────────────────────────────────"
+docker logs --tail 20 nginx-proxy-acme 2>&1 | tail -20
+
+echo ""
+
+# ============================================================================
+echo "9️⃣  RIEPILOGO PROBLEMI"
+echo "─────────────────────────────────────────────────────────────────────"
+
+if [[ $ISSUES -eq 0 ]] && [[ $WARNINGS -eq 0 ]]; then
+    echo "✅ Nessun problema rilevato!"
     echo ""
-    grep -v "^#" .env.domains | grep -v "^$" | while read line; do
-        KEY=$(echo "$line" | cut -d= -f1)
-        VALUE=$(echo "$line" | cut -d= -f2-)
-        printf "  %-30s %s\n" "$KEY" "$VALUE"
-    done
+    echo "Test API di Chatwoot:"
+    echo ""
+    echo "  curl --request GET \\"
+    echo "    --url 'https://chatwoot.tasuthor.com/api/v1/accounts/1/contacts?page=1' \\"
+    echo "    --header 'Authorization: Bearer YOUR_TOKEN'"
+    echo ""
+elif [[ $ISSUES -eq 0 ]]; then
+    echo "⚠️  $WARNINGS avvisi (controllare sopra)"
 else
-    echo -e "${YELLOW}ℹ${NC}  .env.domains non trovato"
-    echo "   Esegui: sudo ./setup-domains.sh"
+    echo "❌ $ISSUES problemi rilevati (controllare sopra)"
+    echo ""
+    echo "💡 Suggerimenti:"
+    echo ""
+    echo "   1. Se nginx-proxy è offline:"
+    echo "      docker logs nginx-proxy | tail -50"
+    echo ""
+    echo "   2. Se chatwoot non è configurato:"
+    echo "      sudo ./add-service.sh"
+    echo ""
+    echo "   3. Se il certificato non è stato emesso:"
+    echo "      docker logs nginx-proxy-acme | grep chatwoot"
+    echo ""
+    echo "   4. Reset completo:"
+    echo "      docker compose down"
+    echo "      docker volume rm nginx-certs nginx-vhost nginx-html acme-state"
+    echo "      sudo ./setup.sh"
 fi
 
-# =============================================================================
-
-print_section "7. CONFIGURAZIONE FILE (configs/ + vhost-configs/)"
-
 echo ""
-if [[ -d "configs" ]] && [[ -n "$(ls -1 configs/ 2>/dev/null)" ]]; then
-    echo "Configurazioni salvate (configs/):"
-    ls -1 configs/ | while read file; do
-        printf "  • %s\n" "$file"
-    done
-else
-    echo -e "${YELLOW}ℹ${NC}  Nessuna configurazione salvata in configs/"
-fi
-
-echo ""
-if [[ -d "vhost-configs" ]] && [[ -n "$(ls -1 vhost-configs/ 2>/dev/null)" ]]; then
-    echo "Configurazioni nginx (vhost-configs/):"
-    ls -1 vhost-configs/ | while read file; do
-        printf "  • %s\n" "$file"
-    done
-else
-    echo -e "${YELLOW}ℹ${NC}  Nessuna configurazione nginx in vhost-configs/"
-fi
-
-# =============================================================================
-
-print_section "8. TEST CONNETTIVITÀ TRA CONTAINER"
-
-echo ""
-if docker ps --format '{{.Names}}' | grep -q "nginx-proxy$"; then
-    echo "Test ping da nginx-proxy a container:"
-    docker ps --format '{{.Names}}' | grep -v "nginx-proxy" | head -3 | while read container; do
-        RESULT=$(docker exec nginx-proxy ping -c 1 "$container" 2>&1 | grep -q "1 packets received" && echo "OK" || echo "FAIL")
-        printf "  → nginx-proxy → %-25s [%s]\n" "$container" "$RESULT"
-    done
-else
-    echo -e "${RED}✗${NC} nginx-proxy non attivo"
-fi
-
-# =============================================================================
-
-print_section "9. LOG RECENTI nginx-proxy-acme"
-
-echo ""
-if docker ps --format '{{.Names}}' | grep -q "nginx-proxy-acme"; then
-    docker logs --tail 20 nginx-proxy-acme 2>&1 | tail -10 || echo "Nessun log disponibile"
-else
-    echo -e "${RED}✗${NC} nginx-proxy-acme non attivo"
-fi
-
-# =============================================================================
-
-print_section "10. COMANDI UTILI SUCCESSIVI"
-
-echo ""
-echo "Monitoraggio tempo reale:"
-echo "  docker logs -f nginx-proxy-acme"
-echo ""
-echo "Test HTTPS (sostituisci ai.tuodominio.com):"
-echo "  curl -I https://ai.tuodominio.com"
-echo ""
-echo "Verifica configurazione nginx:"
-echo "  docker exec nginx-proxy nginx -t"
-echo ""
-echo "Reload nginx dopo cambio config:"
-echo "  docker exec nginx-proxy nginx -s reload"
-echo ""
-
-# =============================================================================
-
-echo -e "${GREEN}✓${NC} Diagnostica completata"
