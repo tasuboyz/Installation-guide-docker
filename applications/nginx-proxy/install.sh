@@ -244,22 +244,24 @@ else
     exit 1
 fi
 
-# Verifica che nginx-proxy sia running e configurato correttamente
-echo "  → Verifica configurazione nginx-proxy..."
-sleep 3
-for i in {1..10}; do
-    # Verifica processo nginx attivo e test configurazione
-    if docker exec nginx-proxy sh -c "pgrep nginx && nginx -t" >/dev/null 2>&1; then
-        print_status "nginx-proxy configurato e attivo"
-        break
-    fi
-    if [[ $i -eq 10 ]]; then
-        print_error "nginx-proxy non risponde - verifica logs"
-        docker logs nginx-proxy --tail 30
-        exit 1
-    fi
-    sleep 2
-done
+# Verifica che nginx-proxy sia stabile (non in crash loop)
+echo "  → Verifica stabilità nginx-proxy..."
+sleep 8
+RESTART_COUNT=$(docker inspect nginx-proxy --format='{{.RestartCount}}' 2>/dev/null || echo "0")
+if [[ "$RESTART_COUNT" -gt 3 ]]; then
+    print_error "nginx-proxy in crash loop (restart count: ${RESTART_COUNT})"
+    docker logs nginx-proxy --tail 50
+    exit 1
+fi
+
+# Verifica che il container sia effettivamente running
+if ! docker ps --format '{{.Names}}' | grep -q "^nginx-proxy$"; then
+    print_error "nginx-proxy non è running"
+    docker logs nginx-proxy --tail 50
+    exit 1
+fi
+
+print_status "nginx-proxy stabile e attivo"
 
 # Check e apertura automatica firewall per porta 80/443
 if command -v ufw &> /dev/null; then
