@@ -18,7 +18,7 @@ services:
     networks:
       - proxy-network
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost/"]
+      test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/localhost/80"]
       interval: 10s
       timeout: 5s
       retries: 3
