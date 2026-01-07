@@ -18,7 +18,7 @@ services:
     networks:
       - proxy-network
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/", "||", "exit", "1"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1/ || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 5
