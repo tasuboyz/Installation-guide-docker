@@ -19,7 +19,6 @@ create_standard_vhost_config() {
     config+="proxy_set_header X-Real-IP \$remote_addr;\n"
     config+="proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\n"
     config+="proxy_set_header X-Forwarded-Proto \$scheme;\n"
-    config+="proxy_pass_request_headers on;\n"
     
     echo -e "$config"
 }
@@ -51,6 +50,7 @@ create_api_config() {
     local config=""
     
     config+="proxy_set_header Authorization \$http_authorization;\n"
+    config+="proxy_set_header api_access_token \$http_api_access_token;\n"
     config+="proxy_pass_header Authorization;\n"
     
     echo -e "$config"
