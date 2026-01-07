@@ -36,6 +36,50 @@ ensure_custom_nginx_conf() {
     fi
 }
 
+scan_active_networks() {
+    echo "🔍 Scansione reti Docker con container attivi..."
+    
+    local networks=()
+    local containers=$(docker ps --format '{{.Names}}')
+    
+    for container in $containers; do
+        local container_networks=$(docker inspect --format='{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$container" 2>/dev/null || true)
+        for net in $container_networks; do
+            # Escludi reti di sistema
+            if [[ "$net" != "bridge" ]] && [[ "$net" != "host" ]] && [[ "$net" != "none" ]]; then
+                # Aggiungi solo se non già presente
+                if [[ ! " ${networks[@]} " =~ " ${net} " ]]; then
+                    networks+=("$net")
+                fi
+            fi
+        done
+    done
+    
+    echo "${networks[@]}"
+}
+
+connect_to_networks() {
+    local container=$1
+    shift
+    local networks=("$@")
+    
+    echo "🔗 Connessione $container alle reti rilevanti..."
+    
+    for network in "${networks[@]}"; do
+        # Verifica se già connesso
+        if docker inspect "$container" --format='{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' 2>/dev/null | grep -qw "$network"; then
+            echo "   ✓ Già connesso a: $network"
+        else
+            echo "   → Connessione a: $network"
+            if docker network connect "$network" "$container" 2>/dev/null; then
+                echo "   ✅ Connesso a: $network"
+            else
+                echo "   ⚠️  Impossibile connettersi a: $network"
+            fi
+        fi
+    done
+}
+
 wait_for_healthy() {
     local container=$1
     local max_attempts=${2:-30}
@@ -156,14 +200,29 @@ if [[ "$REPLY" =~ ^[Nn]$ ]]; then
     exit 0
 fi
 
-echo "[1/3] Arresto container precedenti..."
+echo "[1/5] Arresto container precedenti..."
 docker compose down 2>/dev/null || true
 sleep 2
 
-echo "[2/3] Avvio servizi con rete esterna '$NETWORK'..."
+echo "[2/5] Scansione reti Docker..."
+readarray -t ACTIVE_NETWORKS < <(scan_active_networks)
+if [ ${#ACTIVE_NETWORKS[@]} -gt 0 ]; then
+    echo "   Reti rilevate: ${ACTIVE_NETWORKS[*]}"
+else
+    echo "   Nessuna rete con container attivi (oltre alla rete principale)"
+fi
+
+echo "[3/5] Avvio servizi con rete esterna '$NETWORK'..."
 docker compose -f docker-compose.yml -f docker-compose.external-network.yml up -d
 
-echo "[3/3] Verifica stato..."
+echo "[4/5] Connessione a reti aggiuntive..."
+if [ ${#ACTIVE_NETWORKS[@]} -gt 0 ]; then
+    sleep 3
+    connect_to_networks "nginx-proxy" "${ACTIVE_NETWORKS[@]}"
+    sleep 2
+fi
+
+echo "[5/5] Verifica stato..."
 
 if ! wait_for_healthy "nginx-proxy"; then
     echo ""
@@ -171,6 +230,9 @@ if ! wait_for_healthy "nginx-proxy"; then
     echo ""
     echo "Diagnostica:"
     docker logs nginx-proxy --tail 30
+    echo ""
+    echo "Reti del container:"
+    docker inspect nginx-proxy --format='{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}'
     exit 1
 fi
 
