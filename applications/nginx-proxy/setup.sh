@@ -37,8 +37,6 @@ ensure_custom_nginx_conf() {
 }
 
 scan_active_networks() {
-    echo "🔍 Scansione reti Docker con container attivi..."
-    
     local networks=()
     local containers=$(docker ps --format '{{.Names}}')
     
@@ -55,7 +53,7 @@ scan_active_networks() {
         done
     done
     
-    echo "${networks[@]}"
+    printf '%s\n' "${networks[@]}"
 }
 
 connect_to_networks() {
@@ -85,26 +83,21 @@ wait_for_healthy() {
     local max_attempts=${2:-30}
     local attempt=1
     
-    echo "⏳ Attesa che $container sia healthy..."
+    echo "⏳ Attesa che $container sia in running..."
     
     while [[ $attempt -le $max_attempts ]]; do
-        local health=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "unknown")
+        local status=$(docker inspect --format='{{.State.Running}}' "$container" 2>/dev/null || echo "false")
         
-        if [[ "$health" == "healthy" ]]; then
-            echo "✅ $container è healthy"
+        if [[ "$status" == "true" ]]; then
+            echo "✅ $container è in running"
             return 0
-        fi
-        
-        if [[ "$health" == "unhealthy" ]]; then
-            echo "❌ $container è unhealthy"
-            return 1
         fi
         
         sleep 2
         ((attempt++))
     done
     
-    echo "⚠️  Timeout attesa healthcheck per $container"
+    echo "❌ Timeout: $container non è in running"
     return 1
 }
 
@@ -205,6 +198,7 @@ docker compose down 2>/dev/null || true
 sleep 2
 
 echo "[2/5] Scansione reti Docker..."
+echo "🔍 Scansione reti Docker con container attivi..."
 readarray -t ACTIVE_NETWORKS < <(scan_active_networks)
 if [ ${#ACTIVE_NETWORKS[@]} -gt 0 ]; then
     echo "   Reti rilevate: ${ACTIVE_NETWORKS[*]}"
