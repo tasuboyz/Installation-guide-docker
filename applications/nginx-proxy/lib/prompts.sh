@@ -168,15 +168,15 @@ wizard_get_subdomain() {
     local container_name="$1"
     local base_domain="${2:-}"
     
-    echo ""
+    echo "" >&2
     if [[ -n "$base_domain" ]]; then
         local suggested="${container_name%%_*}.${base_domain}"
         suggested="${suggested//_/-}"
-        echo -e "Suggerimento: ${CYAN}${suggested}${NC}"
+        echo -e "Suggerimento: ${CYAN}${suggested}${NC}" >&2
         read -p "Sottodominio [premi INVIO per usare suggerimento]: " subdomain
         subdomain="${subdomain:-$suggested}"
     else
-        echo "Inserisci il sottodominio COMPLETO (es: app.tuodominio.com)"
+        echo "Inserisci il sottodominio COMPLETO (es: app.tuodominio.com)" >&2
         read -p "Sottodominio: " subdomain
     fi
     
