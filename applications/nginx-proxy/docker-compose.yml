@@ -41,8 +41,7 @@ services:
       - NGINX_DOCKER_GEN_CONTAINER=nginx-proxy
       - ACME_CA_URI=${ACME_CA_URI:-}
     depends_on:
-      nginx-proxy:
-        condition: service_healthy
+      - nginx-proxy
     networks:
       - proxy-network
     restart: always
