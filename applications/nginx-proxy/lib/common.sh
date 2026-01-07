@@ -51,8 +51,8 @@ validate_email() {
 
 validate_domain() {
     local domain="$1"
-    [[ -n "$domain" ]] || return 1
-    [[ "$domain" =~ ^[[:space:]]*$ ]] && return 1
+    # Nessuna validazione - accetta qualsiasi input non vuoto
+    [[ -n "$domain" ]]
 }
 
 check_root() {
