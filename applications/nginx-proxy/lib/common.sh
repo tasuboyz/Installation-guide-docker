@@ -54,7 +54,8 @@ validate_domain() {
     [[ -n "$domain" ]] || return 1
     [[ "$domain" =~ ^[[:space:]]*$ ]] && return 1
     [[ "$domain" =~ [[:space:]] ]] && return 1
-    [[ "$domain" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$ ]]
+    # Validazione permissiva: almeno un punto e caratteri alfanumerici/trattini
+    [[ "$domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$ ]]
 }
 
 check_root() {
