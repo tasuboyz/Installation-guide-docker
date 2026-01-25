@@ -205,7 +205,7 @@ version: '3'
 services:
   base: &base
     image: chatwoot/chatwoot:latest
-    env_file: .env
+    # NON mettere env_file qui! Altrimenti tutti ereditano VIRTUAL_HOST
     volumes:
       - storage_data:/app/storage
 
@@ -214,6 +214,8 @@ services:
     depends_on:
       - postgres
       - redis
+    # IMPORTANTE: env_file SOLO su rails per avere accesso alle credenziali
+    env_file: .env
 COMPOSE_EOF
 
 # Aggiungi configurazione porte/expose basata su USE_PROXY
@@ -268,10 +270,16 @@ cat >> docker-compose.yaml << 'COMPOSE_EOF'
     depends_on:
       - postgres
       - redis
+    # Sidekiq ha bisogno di .env per credenziali DB/Redis
+    env_file: .env
     environment:
       - NODE_ENV=production
       - RAILS_ENV=production
       - INSTALLATION_ENV=docker
+      # ⚠️ CRITICO: Disabilita VIRTUAL_HOST per sidekiq!
+      - VIRTUAL_HOST=
+      - VIRTUAL_PORT=
+      - LETSENCRYPT_HOST=
     command: ['bundle', 'exec', 'sidekiq', '-C', 'config/sidekiq.yml']
     restart: always
 
@@ -281,6 +289,11 @@ cat >> docker-compose.yaml << 'COMPOSE_EOF'
     restart: always
     env_file:
       - .env
+    environment:
+      # ⚠️ CRITICO: Disabilita VIRTUAL_HOST per postgres!
+      - VIRTUAL_HOST=
+      - VIRTUAL_PORT=
+      - LETSENCRYPT_HOST=
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -290,6 +303,11 @@ cat >> docker-compose.yaml << 'COMPOSE_EOF'
     restart: always
     command: ["sh", "-c", "redis-server --requirepass \"$REDIS_PASSWORD\""]
     env_file: .env
+    environment:
+      # ⚠️ CRITICO: Disabilita VIRTUAL_HOST per redis!
+      - VIRTUAL_HOST=
+      - VIRTUAL_PORT=
+      - LETSENCRYPT_HOST=
     volumes:
       - redis_data:/data
 
