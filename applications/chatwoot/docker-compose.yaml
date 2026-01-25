@@ -25,7 +25,8 @@ services:
       - NODE_ENV=production
       - RAILS_ENV=production
       - INSTALLATION_ENV=docker
-      # Queste variabili vengono lette da .env se configurate:
+      # ⚠️ IMPORTANTE: Queste variabili DEVONO essere SOLO su rails, non su sidekiq/postgres/redis
+      # altrimenti nginx-proxy invia traffico HTTP anche a loro!
       - VIRTUAL_HOST=${VIRTUAL_HOST:-}
       - VIRTUAL_PORT=3000
       - LETSENCRYPT_HOST=${LETSENCRYPT_HOST:-}
@@ -49,6 +50,9 @@ services:
       - INSTALLATION_ENV=docker
     command: ['bundle', 'exec', 'sidekiq', '-C', 'config/sidekiq.yml']
     restart: always
+    labels:
+      # Escludi sidekiq da nginx-proxy (non è un web server)
+      - "com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy=false"
 
   postgres:
     image: pgvector/pgvector:pg16
