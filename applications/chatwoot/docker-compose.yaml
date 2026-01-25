@@ -36,8 +36,7 @@ services:
     command: ['bundle', 'exec', 'rails', 's', '-p', '3000', '-b', '0.0.0.0']
     networks:
       - default
-      # Decommentare per nginx-proxy (o usare install.sh che lo fa automaticamente):
-      # - n8n-net
+      - n8n-net
     restart: always
 
   sidekiq:
@@ -85,6 +84,5 @@ volumes:
 networks:
   default:
     driver: bridge
-  # Decommentare per nginx-proxy (lo script install.sh lo fa automaticamente):
-  # n8n-net:
-  #   external: true
+  n8n-net:
+    external: true
