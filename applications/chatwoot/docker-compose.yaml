@@ -7,7 +7,7 @@ version: '3'
 services:
   base: &base
     image: chatwoot/chatwoot:latest
-    env_file: .env
+    # NON mettere env_file qui! Altrimenti tutti i container ereditano VIRTUAL_HOST
     volumes:
       - storage_data:/app/storage
 
@@ -16,6 +16,8 @@ services:
     depends_on:
       - postgres
       - redis
+    # IMPORTANTE: env_file SOLO su rails per avere accesso alle credenziali
+    env_file: .env
     # Se usi nginx-proxy: commenta 'ports' e usa solo 'expose'
     # ports:
     #   - '3000:3000'
@@ -25,8 +27,7 @@ services:
       - NODE_ENV=production
       - RAILS_ENV=production
       - INSTALLATION_ENV=docker
-      # ⚠️ IMPORTANTE: Queste variabili DEVONO essere SOLO su rails, non su sidekiq/postgres/redis
-      # altrimenti nginx-proxy invia traffico HTTP anche a loro!
+      # ✅ VIRTUAL_HOST solo su rails - nginx-proxy instrada SOLO qui
       - VIRTUAL_HOST=${VIRTUAL_HOST:-}
       - VIRTUAL_PORT=3000
       - LETSENCRYPT_HOST=${LETSENCRYPT_HOST:-}
@@ -44,15 +45,15 @@ services:
     depends_on:
       - postgres
       - redis
+    # Sidekiq ha bisogno di .env per credenziali DB/Redis
+    env_file: .env
     environment:
       - NODE_ENV=production
       - RAILS_ENV=production
       - INSTALLATION_ENV=docker
+      # NON mettere VIRTUAL_HOST qui!
     command: ['bundle', 'exec', 'sidekiq', '-C', 'config/sidekiq.yml']
     restart: always
-    labels:
-      # Escludi sidekiq da nginx-proxy (non è un web server)
-      - "com.github.jrcs.letsencrypt_nginx_proxy_companion.nginx_proxy=false"
 
   postgres:
     image: pgvector/pgvector:pg16
