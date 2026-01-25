@@ -50,7 +50,11 @@ services:
       - NODE_ENV=production
       - RAILS_ENV=production
       - INSTALLATION_ENV=docker
-      # NON mettere VIRTUAL_HOST qui!
+      # ⚠️ CRITICO: Disabilita VIRTUAL_HOST per sidekiq!
+      # Nginx-proxy NON deve registrare sidekiq come backend
+      - VIRTUAL_HOST=
+      - VIRTUAL_PORT=
+      - LETSENCRYPT_HOST=
     command: ['bundle', 'exec', 'sidekiq', '-C', 'config/sidekiq.yml']
     restart: always
 
