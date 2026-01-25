@@ -1,0 +1,15 @@
+# Environment variables con credenziali sensibili
+.env
+.env.local
+.env.*.local
+
+# File temporanei
+*.log
+*.tmp
+*.swp
+*~
+
+# Volume data (se monti localmente)
+storage/
+postgres_data/
+redis_data/
