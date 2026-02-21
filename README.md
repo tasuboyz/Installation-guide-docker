@@ -42,6 +42,7 @@ Applicazioni aggiuntive (installazione opzionale):
 | [Nginx Proxy](applications/nginx-proxy/README.md) | ⭐ **Reverse proxy + Certbot SSL** | ✅ Tutti i servizi |
 | [EspoCRM](applications/espocrm/README.md) | Sistema CRM | - |
 | [Grafana](applications/grafana/README.md) | Dashboard e monitoraggio | ✅ Metriche servizi |
+| [OpenClaw AI](applications/openclaw/README.md) | Gateway AI con sandboxing e canali | ✅ Telegram, Discord, WhatsApp |
 | [Telegram Bot API](applications/telegram-bot-api/README.md) | Server Telegram Bot API personalizzato | ✅ n8n, Chatwoot |
 
 ---
