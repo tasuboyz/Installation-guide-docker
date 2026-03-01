@@ -15,12 +15,9 @@ RUN corepack enable
 
 WORKDIR /app
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
-COPY ui/package.json ./ui/package.json
+COPY . .
 
 RUN pnpm install --frozen-lockfile
-
-COPY . .
 RUN pnpm build
 RUN pnpm ui:install
 RUN pnpm ui:build
