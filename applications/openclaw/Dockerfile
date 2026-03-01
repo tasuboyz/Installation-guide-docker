@@ -17,11 +17,6 @@ WORKDIR /app
 
 COPY . .
 
-RUN pnpm install --frozen-lockfile
-RUN pnpm build
-RUN pnpm ui:install
-RUN pnpm ui:build
-
 RUN chown -R node:node /app /home/node
 USER node
 
