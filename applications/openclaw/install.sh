@@ -271,7 +271,6 @@ COMPOSE_EOF
     fi
 
     cat >> docker-compose.yml << 'COMPOSE_EOF'
-    restart: always
 
   openclaw-cli:
     image: openclaw:local
