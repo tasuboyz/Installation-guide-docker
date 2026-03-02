@@ -28,7 +28,6 @@ OPENCLAW_PORT=18789
 ENABLE_SANDBOX=false
 SETUP_CHANNELS=false
 OPENCLAW_HOME_VOLUME=""
-OPENCLAW_IMAGE="ghcr.io/openclaw/openclaw:latest"
 
 echo ""
 echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════╗${NC}"
@@ -302,48 +301,6 @@ COMPOSE_EOF
 
     print_status "docker-compose.yml generato"
 }
-    env_file: .env
-    volumes:
-      - openclaw_config:/home/node/.openclaw
-      - openclaw_workspace:/home/node/.openclaw/workspace
-COMPOSE_EOF
-
-    if [[ -n "$OPENCLAW_HOME_VOLUME" ]]; then
-        echo "      - ${OPENCLAW_HOME_VOLUME}:/home/node" >> docker-compose.yml
-    fi
-
-    cat >> docker-compose.yml << 'COMPOSE_EOF'
-    networks:
-      - default
-    profiles:
-      - cli
-    entrypoint: ["node", "dist/cli.js"]
-
-volumes:
-  openclaw_config:
-  openclaw_workspace:
-COMPOSE_EOF
-
-    if [[ -n "$OPENCLAW_HOME_VOLUME" ]]; then
-        echo "  ${OPENCLAW_HOME_VOLUME}:" >> docker-compose.yml
-    fi
-
-    cat >> docker-compose.yml << 'COMPOSE_EOF'
-
-networks:
-  default:
-    driver: bridge
-COMPOSE_EOF
-
-    if [[ "$USE_PROXY" == "true" ]]; then
-        cat >> docker-compose.yml << COMPOSE_EOF
-  ${DOCKER_NETWORK}:
-    external: true
-COMPOSE_EOF
-    fi
-
-    print_status "docker-compose.yml generato"
-}
 
 build_and_start() {
     echo ""
@@ -353,7 +310,7 @@ build_and_start() {
     print_info "Pulizia installazioni precedenti..."
     docker compose down -v 2>/dev/null || true
 
-    print_info "Download immagine OpenClaw ($OPENCLAW_IMAGE)..."
+    print_info "Download immagine OpenClaw (ghcr.io/openclaw/openclaw:latest)..."
     docker compose pull
 
     print_info "Avvio OpenClaw gateway..."
