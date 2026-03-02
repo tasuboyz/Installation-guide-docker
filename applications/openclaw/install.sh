@@ -425,6 +425,8 @@ print_summary() {
     echo "   docker compose ps"
     echo "   docker compose logs openclaw-gateway"
     echo ""
+
+    if [[ "$USE_PROXY" == "true" ]]; then
         print_info "Il certificato SSL verrà emesso automaticamente da acme-companion."
         print_warning "Assicurati che nginx-proxy e nginx-proxy-acme siano in esecuzione"
         print_warning "sulla stessa rete ($DOCKER_NETWORK)."
