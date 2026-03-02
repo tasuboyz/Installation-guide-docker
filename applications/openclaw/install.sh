@@ -199,10 +199,10 @@ ENV_EOF
 }
 
 generate_compose() {
-    cat > docker-compose.yml << COMPOSE_EOF
+    cat > docker-compose.yml << 'COMPOSE_EOF'
 services:
   openclaw-gateway:
-    image: ${OPENCLAW_IMAGE}
+    image: ghcr.io/openclaw/openclaw:latest
     container_name: openclaw-gateway
     restart: unless-stopped
     env_file: .env
@@ -240,7 +240,7 @@ COMPOSE_EOF
 
     cat >> docker-compose.yml << 'COMPOSE_EOF'
     healthcheck:
-      test: ["CMD", "node", "dist/index.js", "health", "--token", "${OPENCLAW_GATEWAY_TOKEN}"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:18789/healthz"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -255,11 +255,53 @@ COMPOSE_EOF
 COMPOSE_EOF
     fi
 
-    cat >> docker-compose.yml << COMPOSE_EOF
+    cat >> docker-compose.yml << 'COMPOSE_EOF'
 
   openclaw-cli:
-    image: ${OPENCLAW_IMAGE}
+    image: ghcr.io/openclaw/openclaw:latest
     container_name: openclaw-cli
+    env_file: .env
+    volumes:
+      - openclaw_config:/home/node/.openclaw
+      - openclaw_workspace:/home/node/.openclaw/workspace
+COMPOSE_EOF
+
+    if [[ -n "$OPENCLAW_HOME_VOLUME" ]]; then
+        echo "      - ${OPENCLAW_HOME_VOLUME}:/home/node" >> docker-compose.yml
+    fi
+
+    cat >> docker-compose.yml << 'COMPOSE_EOF'
+    networks:
+      - default
+    profiles:
+      - cli
+    entrypoint: ["node", "dist/cli.js"]
+
+volumes:
+  openclaw_config:
+  openclaw_workspace:
+COMPOSE_EOF
+
+    if [[ -n "$OPENCLAW_HOME_VOLUME" ]]; then
+        echo "  ${OPENCLAW_HOME_VOLUME}:" >> docker-compose.yml
+    fi
+
+    cat >> docker-compose.yml << 'COMPOSE_EOF'
+
+networks:
+  default:
+    driver: bridge
+COMPOSE_EOF
+
+    if [[ "$USE_PROXY" == "true" ]]; then
+        cat >> docker-compose.yml << COMPOSE_EOF
+  ${DOCKER_NETWORK}:
+    external: true
+COMPOSE_EOF
+    fi
+
+    print_status "docker-compose.yml generato"
+}
     env_file: .env
     volumes:
       - openclaw_config:/home/node/.openclaw
@@ -313,9 +355,6 @@ build_and_start() {
 
     print_info "Download immagine OpenClaw ($OPENCLAW_IMAGE)..."
     docker compose pull
-
-    print_info "Esecuzione onboarding wizard..."
-    docker compose run --rm openclaw-cli onboard
 
     print_info "Avvio OpenClaw gateway..."
     docker compose up -d openclaw-gateway
@@ -425,8 +464,10 @@ print_summary() {
     echo ""
     print_info "Apri la dashboard nel browser e incolla il token in Settings → Token."
     echo ""
-
-    if [[ "$USE_PROXY" == "true" ]]; then
+    print_warning "Se il gateway non si avvia, verifica l'immagine OpenClaw:"
+    echo "   docker compose ps"
+    echo "   docker compose logs openclaw-gateway"
+    echo ""
         print_info "Il certificato SSL verrà emesso automaticamente da acme-companion."
         print_warning "Assicurati che nginx-proxy e nginx-proxy-acme siano in esecuzione"
         print_warning "sulla stessa rete ($DOCKER_NETWORK)."
