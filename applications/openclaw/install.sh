@@ -28,7 +28,7 @@ OPENCLAW_PORT=18789
 ENABLE_SANDBOX=false
 SETUP_CHANNELS=false
 OPENCLAW_HOME_VOLUME=""
-OPENCLAW_DOCKER_APT_PACKAGES=""
+OPENCLAW_IMAGE="ghcr.io/openclaw/openclaw:latest"
 
 echo ""
 echo -e "${CYAN}╔═══════════════════════════════════════════════════════════════╗${NC}"
@@ -143,12 +143,6 @@ configure_options() {
         print_status "Volume persistente: $OPENCLAW_HOME_VOLUME"
     fi
 
-    read -p "Pacchetti apt aggiuntivi da installare nell'immagine? (spazio-separati, vuoto=nessuno): " apt_packages
-    if [[ -n "$apt_packages" ]]; then
-        OPENCLAW_DOCKER_APT_PACKAGES="$apt_packages"
-        print_status "Pacchetti extra: $OPENCLAW_DOCKER_APT_PACKAGES"
-    fi
-
     read -p "Vuoi abilitare il sandbox per gli agenti? [y/N]: " enable_sandbox
     if [[ "${enable_sandbox,,}" == "y" ]]; then
         ENABLE_SANDBOX=true
@@ -183,12 +177,6 @@ ENV_EOF
         echo "OPENCLAW_HOME_VOLUME=${OPENCLAW_HOME_VOLUME}" >> .env
     fi
 
-    if [[ -n "$OPENCLAW_DOCKER_APT_PACKAGES" ]]; then
-        echo "" >> .env
-        echo "# === Pacchetti extra ===" >> .env
-        echo "OPENCLAW_DOCKER_APT_PACKAGES=${OPENCLAW_DOCKER_APT_PACKAGES}" >> .env
-    fi
-
     if [[ "$USE_PROXY" == "true" ]]; then
         cat >> .env << ENV_EOF
 
@@ -211,13 +199,10 @@ ENV_EOF
 }
 
 generate_compose() {
-    cat > docker-compose.yml << 'COMPOSE_EOF'
+    cat > docker-compose.yml << COMPOSE_EOF
 services:
   openclaw-gateway:
-    image: openclaw:local
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${OPENCLAW_IMAGE}
     container_name: openclaw-gateway
     restart: unless-stopped
     env_file: .env
@@ -270,10 +255,10 @@ COMPOSE_EOF
 COMPOSE_EOF
     fi
 
-    cat >> docker-compose.yml << 'COMPOSE_EOF'
+    cat >> docker-compose.yml << COMPOSE_EOF
 
   openclaw-cli:
-    image: openclaw:local
+    image: ${OPENCLAW_IMAGE}
     container_name: openclaw-cli
     env_file: .env
     volumes:
@@ -326,12 +311,8 @@ build_and_start() {
     print_info "Pulizia installazioni precedenti..."
     docker compose down -v 2>/dev/null || true
 
-    print_info "Build immagine OpenClaw (potrebbe richiedere alcuni minuti)..."
-    local build_args=""
-    if [[ -n "$OPENCLAW_DOCKER_APT_PACKAGES" ]]; then
-        build_args="--build-arg OPENCLAW_DOCKER_APT_PACKAGES=\"${OPENCLAW_DOCKER_APT_PACKAGES}\""
-    fi
-    docker compose build $build_args
+    print_info "Download immagine OpenClaw ($OPENCLAW_IMAGE)..."
+    docker compose pull
 
     print_info "Esecuzione onboarding wizard..."
     docker compose run --rm openclaw-cli onboard
@@ -354,16 +335,9 @@ build_sandbox_image() {
     fi
 
     echo ""
-    print_info "Build immagine sandbox..."
-
-    if [[ -f "scripts/sandbox-setup.sh" ]]; then
-        bash scripts/sandbox-setup.sh
-        print_status "Immagine sandbox openclaw-sandbox:bookworm-slim creata"
-    else
-        print_warning "Script sandbox-setup.sh non trovato."
-        print_warning "Scaricalo dal repository OpenClaw e riesegui:"
-        echo "   scripts/sandbox-setup.sh"
-    fi
+    print_info "Sandbox abilitato. Scarica e configura l'immagine sandbox dal repository OpenClaw:"
+    echo "   https://github.com/openclaw/openclaw"
+    print_warning "La configurazione sandbox va eseguita manualmente dopo l'installazione."
 }
 
 setup_channels() {
